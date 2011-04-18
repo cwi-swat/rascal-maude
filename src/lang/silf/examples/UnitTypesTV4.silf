@@ -1,0 +1,11 @@
+function $U test($U x, $U y)
+begin
+  return x * y;
+end
+
+function test2(void)
+begin
+  var $m x;
+  var $m y;
+  call test(x,y); 
+end

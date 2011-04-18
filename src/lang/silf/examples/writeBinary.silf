@@ -1,0 +1,22 @@
+function writeBinary(x) 
+begin
+  var i;
+  var b[32];
+  var j;
+  i := 0;
+  while x > 0 do
+    b[i] := x % 2;
+    x := x / 2;
+    i := i + 1;
+  od
+  j := i - 1;
+  while j >= 0 do
+    write b[j];
+    j := j - 1;
+  od
+end
+
+function main(void) 
+begin
+  call writeBinary(read);
+end

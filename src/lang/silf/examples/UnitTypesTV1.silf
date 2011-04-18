@@ -1,0 +1,4 @@
+function $U test($U x)
+begin
+  return x;
+end

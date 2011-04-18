@@ -1,0 +1,11 @@
+function $U test($U x)
+begin
+  return x;
+end
+
+function test2(void)
+begin
+  var x;
+  var y;
+  y := test(x); # should be an error, x and y need the same type
+end

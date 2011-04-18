@@ -1,0 +1,11 @@
+function $U^2 test($U x, $U y)
+begin
+  return x * y;
+end
+
+function test2(void)
+begin
+  var $m x;
+  var $f y;
+  call test(x,y); 
+end

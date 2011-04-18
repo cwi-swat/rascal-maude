@@ -1,0 +1,148 @@
+***
+*** SILF Semantics: Functions
+***
+fmod GENERIC-FUNCTION-SEMANTICS-PREPOST is
+  including GENERIC-FUNCTION-SEMANTICS-BASE .
+  including STATE-WCANN .
+  
+  var TX : TypedId . 
+  var TXs : TypedIdList .  
+  var PPl : PrePostList .
+  var Dl : DeclList .
+  var Sl : StmtList .
+  vars K K' : Computation .
+  vars ICS ICS' : <Id><Computation>Set .
+  var E : Exp .
+  var V : Value .
+  vars Env Env' : <Id><Location>Set .
+  var Xs : IdList .
+  vars Vl Vl' : ValueList .
+  var X : Id .
+  var RL : RLocation .
+  
+  ***
+  *** For analysis, we need two copies of the function. The one that goes into fenv
+  *** is the one we will "run" when we want to analyze the function; the one
+  *** that goes into ftenv is type signature information that will be used to
+  *** check any call to the function.
+  ***
+  eq k(fdecl(function TX (TXs) PPl begin Dl Sl end) -> K) fenv(ICS) ftenv(ICS') currLoc(RL) =
+     k(K) currLoc(RL)
+     fenv(ICS  [stripType(TX), (rloc(RL) -> checkRetType(TX) -> checkSigTypes(TXs) -> applyPM(PPl) -> checkPoint -> decl(Dl) -> discard -> 
+                                saveRetType(TX) -> savePostConds(PPl) -> stmt(Sl) -> discard -> dropRetType -> dropPostConds)])
+     ftenv(ICS' [stripType(TX), (checkAndBindCall(TX,TXs) -> discard -> checkPreConds(PPl) -> applyHavoc(PPl) -> getRetValForCall(TX,PPl))]) .
+
+  
+  
+  
+  *** Function return; if we return from a function, we actually just keep going in the
+  *** current function after checking to ensure the return is correct. This is because
+  *** this is a static execution, and we want to cover even code that is technically
+  *** dead code to ensure it is free of type errors.
+  ***
+  op return : Value PrePostList -> ComputationItem .
+  eq k(stmt(return(E)) -> K) retType(V) postConds(PPl) = k(exp(E) -> return(V,PPl) -> K) retType(V) postConds(PPl) .
+  
+  ***
+  *** Apply, with annotations; we also handle the case where the invoked function
+  *** does not exist here, even if this is more properly a type checking issue.
+  ***
+  eq k(val(Vl) -> apply(X) -> K) ftenv(ICS [X,K']) genv(Env) env(Env') = 
+     k(pushStore -> val(Vl) -> K' -> restoreEnv(Env') -> popStore -> unlockGlobals -> K) ftenv(ICS [X,K']) genv(Env) env(Env) .
+  eq k(val(Vl) -> apply(X) -> K) ftenv(ICS) genv(Env) env(Env') = 
+     k(issueWarning(1,"Invoked function " + pretty-print(X) + " is undefined.") -> noVal -> K) ftenv(ICS) genv(Env) env(Env') .
+
+  ***
+  *** TODO: Find a better place for this...
+  ***  
+  eq k(val(Vl) -> unlockGlobals -> K) = k(unlockGlobals -> val(Vl) -> K) .
+
+  ***
+  *** Apply preconditions and modifies clauses
+  ***
+  op applyPM : PrePostList -> ComputationItem .
+  eq k(applyPM(PPl) -> K) = 
+     k(applyPreConds(filterForPre(PPl)) -> lockGlobals -> applyModifies(filterForMod(PPl)) -> K) .
+
+  ***
+  *** Apply just preconditions
+  ***
+  op applyPreConds : PrePostList -> ComputationItem .
+  eq k(applyPreConds(noAnns) -> K) = k(K) .
+  
+  ***
+  *** Apply just modifies
+  ***
+  op applyModifies : PrePostList -> ComputationItem .
+  eq k(applyModifies(mod(X,Xs) PPl) -> K) = k(lockIdentifiers(Xs) -> applyModifies(PPl) -> K) .  
+  eq k(applyModifies(noAnns) -> K) = k(K) .
+
+  ***
+  *** Apply postconditions at call sites
+  ***
+  op applyPostConds : PrePostList -> ComputationItem .
+  eq k(applyPostConds(noAnns) -> K) = k(K) .
+      
+  ***
+  *** Save the postconditions into a state cell where they can be accessed later
+  ***
+  op postConds : PrePostList -> State [format (r! o)] .
+  op savePostConds : PrePostList -> ComputationItem .
+  eq k(savePostConds(PPl) -> K) = k(K) postConds(filterForPost(PPl)) .
+  
+  ***
+  *** Remove the postconditions from the state
+  ***
+  op dropPostConds : -> ComputationItem .
+  eq k(dropPostConds -> K) postConds(PPl) = k(K) .
+  
+  ***
+  *** checkAndBindCall is used in the version of the function used to
+  *** check calls to that function. It expects a list of values
+  *** on top that represent the values being passed as the actuals
+  *** to the functions. What constitues a valid argument or an invalid
+  *** argument is left to the policy to decide. checkCallAux does most
+  *** of the work, actually checking each argument against the supposed
+  *** type. This is different from checkCall in that it binds the results
+  *** to the formal parameters in an environment just made up of the globals,
+  *** so these can be referenced inside annotations. Note that the environment
+  *** handling logic is in function application; we just assume it here.
+  ***
+  op checkAndBindCall : TypedIdList -> ComputationItem .
+  op checkAndBindCallAux : TypedIdList ValueList -> ComputationItem .
+  op comparebind_to_in_ : ValueList ValueList TypedIdList -> ComputationItem .
+  
+  eq k(val(Vl) -> checkAndBindCall(TX,TXs) -> K) = k(extractTypes(TXs) -> checkAndBindCallAux(TX,TXs,Vl) -> K) .
+  eq k(val(Vl) -> checkAndBindCallAux(TXs,Vl') -> K) = k((comparebind Vl' to Vl in (TXs)) -> K) .
+  
+  ***
+  *** Get the return type for a call, based on type and code annotations
+  ***
+  op getRetValForCall : TypedId PrePostList -> ComputationItem .
+  
+  ***
+  *** Check the preconditions at a call site
+  ***
+  op checkPreConds : PrePostList -> ComputationItem .
+  op checkPreCondsAux : PrePostList -> ComputationItem .
+  eq k(checkPreConds(PPl) -> K) = k(checkPreCondsAux(filterForPre(PPl)) -> K) .
+  eq k(checkPreCondsAux(noAnns) -> K) = k(K) .
+
+  ***
+  *** Check the postconditions at function return
+  ***
+  op checkPostConds : PrePostList -> ComputationItem .
+  op checkPostCondsAux : PrePostList -> ComputationItem .
+  eq k(checkPostConds(PPl) -> K) = k(checkPostCondsAux(filterForPost(PPl)) -> K) .
+  eq k(checkPostCondsAux(noAnns) -> K) = k(K) .
+      
+  ***
+  *** Apply a havoc statement
+  ***
+  op applyHavoc : PrePostList -> ComputationItem .
+  op applyHavocAux : PrePostList -> ComputationItem .
+  eq k(applyHavoc(PPl) -> K) = k(applyHavocAux(filterForMod(PPl)) -> K) .
+  eq k(applyHavocAux(mod(X,Xs) PPl) -> K) = k(clearIdents(Xs) -> applyHavocAux(PPl) -> K) .
+  eq k(applyHavocAux(noAnns) -> K) = k(K) .
+endfm
+

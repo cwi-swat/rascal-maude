@@ -1,0 +1,7 @@
+function main(void)
+begin
+  var x; var y;
+  assume(UNITS): @unit(x) = $m;
+  assume(UNITS): @unit(y) = $kg;
+  write x + y;
+end

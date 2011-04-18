@@ -1,0 +1,696 @@
+fmod SILF-PRETTY-PRINTER is
+  including PRETTY-PRINT .
+  pr SILF-SYNTAX .
+  pr STRING .
+  pr CONVERSION .
+    
+  vars E E' : Exp . 
+  var X : Id . 
+  var El : ExpList .
+  vars TA TA' : TypeAnn . 
+  var I : Int . 
+  var B : Bool .
+  var Q : Qid . 
+  var Xl : IdList .
+  
+  op pretty-print : Exp -> String .
+  op pretty-print : Id -> String .
+  op pretty-print : ExpList -> String .
+  op pretty-print : IdList -> String .
+  
+  ***
+  *** Pretty-print expressions
+  ***
+  eq pretty-print(E + E') = "(" + pretty-print(E) + " + " + pretty-print(E') + ")" .
+  eq pretty-print(E - E') = "(" + pretty-print(E) + " - " + pretty-print(E') + ")" .
+  eq pretty-print(E * E') = "(" + pretty-print(E) + " * " + pretty-print(E') + ")" .
+  eq pretty-print(E / E') = "(" + pretty-print(E) + " / " + pretty-print(E') + ")" .
+  eq pretty-print(E % E') = "(" + pretty-print(E) + " % " + pretty-print(E') + ")" .
+  eq pretty-print(- E) = "(" + "-" + pretty-print(E) + ")" .
+  eq pretty-print(E < E') = "(" + pretty-print(E) + " < " + pretty-print(E') + ")" .
+  eq pretty-print(E <= E') = "(" + pretty-print(E) + " <= " + pretty-print(E') + ")" .
+  eq pretty-print(E > E') = "(" + pretty-print(E) + " > " + pretty-print(E') + ")" .
+  eq pretty-print(E >= E') = "(" + pretty-print(E) + " >= " + pretty-print(E') + ")" .
+  eq pretty-print(E = E') = "(" + pretty-print(E) + " = " + pretty-print(E') + ")" .
+  eq pretty-print(E != E') = "(" + pretty-print(E) + " != " + pretty-print(E') + ")" .
+  eq pretty-print(E and E') = "(" + pretty-print(E) + " and " + pretty-print(E') + ")" .
+  eq pretty-print(E or E') = "(" + pretty-print(E) + " or " + pretty-print(E') + ")" .
+  eq pretty-print(not E) = "(" + "not " + pretty-print(E) + ")" .
+  eq pretty-print(X ( El ) ) = "(" + pretty-print(X) + "(" + pretty-print(El) + ")" + ")" .
+  eq pretty-print(X () ) = "(" + pretty-print(X) + "(" + ")" + ")" .
+  eq pretty-print(X [ E ] ) = "(" + pretty-print(X) + "[" + pretty-print(E) + "]" + ")" .
+  eq pretty-print(read) = "read" .
+  eq pretty-print(cast E to ( TA ) ) = "(" + "cast " + pretty-print(E) + " to (" + pretty-print(TA) + ")" + ")" .
+  eq pretty-print(#(I)) = string(I,10) .
+  eq pretty-print(b(true)) = "true" .
+  eq pretty-print(b(false)) = "false" .
+  
+  ***
+  *** Pretty-print identifiers
+  ***
+  eq pretty-print(n(Q)) = string(Q) .
+  eq pretty-print(@result) = "@result" .
+
+  ***
+  *** Pretty-print lists of identifiers
+  ***
+ ceq pretty-print(X, Xl) = pretty-print(X) + "," + pretty-print(Xl) if Xl =/= nil .
+ 
+  ***
+  *** Pretty-print lists of expressions
+  ***
+ ceq pretty-print(E,El) = pretty-print(E) + "," + pretty-print(El) if El =/= nil .
+ 
+endfm
+
+fmod ANALYSIS-STATE-LOCATIONS is
+  protecting SILF-STATE .
+  protecting SILF-HELPING-OPS .
+  protecting SILF-PRETTY-PRINTER .
+  protecting RASCAL-LOCATION .
+
+  op currLoc : RLocation -> State [format (r! o)] .
+
+  vars RL RL' : RLocation . var E : Exp . 
+  var S : Stmt . var P : Pgm . var D : Decl . 
+  var FD : FunDecl . var K : Computation .
+  var Vl : ValueList .
+
+  op rloc : RLocation -> ComputationItem .
+  eq k(rloc(RL) -> K) currLoc(RL') = k(K) currLoc(RL) .
+
+  ***
+  *** Handle located language features
+  ***
+  eq k(exp(locatedExp(E, RL)) -> K) currLoc(RL') =
+     k(exp(E) -> rloc(RL') -> K) currLoc(RL) .
+
+  eq pretty-print(locatedExp(E, RL)) = pretty-print(E) .
+
+  eq k(val(Vl) -> rloc(RL) -> K) = k(rloc(RL) -> val(Vl) -> K) .
+
+  eq k(stmt(locatedStmt(S, RL)) -> K) currLoc(RL') =
+     k(stmt(S) -> rloc(RL') -> K) currLoc(RL) .
+
+  eq k(fdecl(locatedFunDecl(FD, RL)) -> K) currLoc(RL') =
+     k(fdecl(FD) -> rloc(RL') -> K) currLoc(RL) .
+
+  eq k(pgm(locatedPgm(P, RL)) -> K) currLoc(RL') =
+     k(pgm(P) -> rloc(RL') -> K) currLoc(RL) .
+
+  eq k(decl(locatedDecl(D, RL)) -> K) currLoc(RL') =
+     k(decl(D) -> rloc(RL') -> K) currLoc(RL) .
+
+endfm
+
+***
+*** Output. Each output entry includes the warning level,
+*** the line number that triggered the message, and the
+*** message itself. It is also possible to include a set of
+*** environments, which can make the cause of the error more
+*** clear.
+***
+fmod OUTPUT is
+  pr INT .
+  pr STRING .
+  pr STATE-SORTS .
+  pr SILF-STATE .
+  pr ANALYSIS-STATE-LOCATIONS .
+    
+  sorts Output OutputSet OutputList Warning WarningItem WarningItemSet .
+  subsort Warning < Output .
+  subsort Output < OutputList .
+  subsort Output < OutputSet .
+  subsort WarningItem < WarningItemSet .
+  
+  var O : Output . var OS : OutputSet . vars OL OL' : OutputList .  
+  vars WS WS' : WarningItemSet . vars I I' : Int . var K : Computation .
+  var S : String .
+  
+  op noOutput : -> OutputSet .
+  op __ : OutputSet OutputSet -> OutputSet [assoc comm id: noOutput] .
+  
+  op emptyOL : -> OutputList .
+  op _,_ : OutputList OutputList -> OutputList [assoc id: emptyOL] .
+  
+  eq O O = O . *** Maintain set-ness
+  
+  op noItems : -> WarningItemSet .
+  op __ : WarningItemSet WarningItemSet -> WarningItemSet [assoc comm id: noItems] .
+  
+  op warning : WarningItemSet -> Warning . 
+  op level : Int -> WarningItem .
+  op msgloc : RLocation -> WarningItem .
+  op msg : String -> WarningItem .
+  
+  op setToList : OutputSet -> OutputList .
+  op sortByLine : OutputList -> OutputList .
+  
+  eq setToList(O OS) = O, setToList(OS) .
+  eq setToList(noOutput) = emptyOL .
+  
+*** TODO: Adapt to use Rascal locations, not line numbers
+*** ceq sortByLine(OL, warning(ln(I) WS), warning(ln(I') WS'), OL') =
+***     sortByLine(OL, warning(ln(I') WS'), warning(ln(I) WS), OL')
+***  if I > I' .
+***  eq sortByLine(OL) = OL [owise] .
+
+endfm
+
+fmod ANALYSIS-STATE-OUTPUT is
+  pr SILF-STATE .
+  pr OUTPUT .
+
+  var I : Int . var S : String . var K : Computation .
+  var OS : OutputSet . var RL : RLocation .
+
+  op log : OutputSet -> State [format (r! o)] .
+
+  op issueWarning : Int String -> ComputationItem .
+  eq k(issueWarning(I,S) -> K) currLoc(RL) log(OS) =
+     k(K) currLoc(RL) log(OS warning(level(I) msgloc(RL) msg(S))) .
+endfm
+
+fmod LOCATION-SET is
+  pr SILF-STATE .
+  sort LocationSet .
+  subsort Location < LocationSet .
+  op nilLS : -> LocationSet .
+  op __ : LocationSet LocationSet -> LocationSet [assoc comm id: nilLS] .
+
+  var L : Location . 
+  vars LS LS' : LocationSet .
+  var LVS : <Location><Value>Set .
+  var V : Value .
+  
+  eq L L = L .
+  
+  op _in_ : Location LocationSet -> Bool .
+  op _notin_ : Location LocationSet -> Bool .
+  
+  eq L in (L LS) = true .
+  eq L in LS = false [owise] .
+  
+  eq L notin LS = not (L in LS) .
+  
+  op setToList : LocationSet -> LocationList .
+  eq setToList(L LS) = L, setToList(LS) .
+  eq setToList(nilLS) = nil .
+  
+  op lvset2lset : <Location><Value>Set -> LocationSet .
+  eq lvset2lset([L,V] LVS) = L lvset2lset(LVS) .
+  eq lvset2lset(nil) = nilLS [owise] .  
+  
+  op _-_ : LocationSet LocationSet -> LocationSet .
+  eq (L LS) - (L LS') = LS - LS' .
+  eq LS - LS' = LS [owise] .
+endfm
+
+fmod ANALYSIS-STATE-LOCKED-LOCS is
+  pr LOCATION-SET .
+
+  var X : Id . var Xl : IdList . var K : Computation .
+  var L : Location . var LS : LocationSet .
+  var Env : <Id><Location>Set .
+  var SFL : StackFrameList .
+  var N : Nat .
+  var LVS : <Location><Value>Set .
+  var V : Value .
+  
+  op lockedLocs : LocationSet -> State [format (r! o)] .
+  
+  op lockIdentifiers : IdList -> ComputationItem .
+  eq k(lockIdentifiers(X,Xl) -> K) env([X,L] Env) lockedLocs(LS) =
+     k(lockIdentifiers(Xl) -> K) env([X,L] Env) lockedLocs(L LS) .
+  eq k(lockIdentifiers(nil) -> K) = k(K) .
+  
+  op unlockIdentifiers : IdList -> ComputationItem .
+  eq k(unlockIdentifiers(X,Xl) -> K) env([X,L] Env) lockedLocs(L LS) =
+     k(unlockIdentifiers(Xl) -> K) env([X,L] Env) lockedLocs(LS) .
+  eq k(unlockIdentifiers(nil) -> K) = k(K) .
+
+  ***
+  *** Lock all global variables. They are stored in the bottom
+  *** stack of memory, so we get back all the locations in this
+  *** stack and lock them.
+  ***
+  op lockGlobals : -> ComputationItem .
+  eq k(lockGlobals -> K) lockedLocs(LS) store(SFL,[N,LVS]) =
+     k(K) lockedLocs(LS lvset2lset(LVS)) store(SFL,[N,LVS]) .
+  
+  ***
+  *** Unlock a location
+  ***
+  op unlockLoc : Location -> ComputationItem .
+  eq k(unlockLoc(L) -> K) lockedLocs(L LS) = k(K) lockedLocs(LS) .
+  eq k(unlockLoc(L) -> K) lockedLocs(LS) = k(K) lockedLocs(LS) [owise] .
+  
+  ***
+  *** Lock a location
+  ***
+  op lockLoc : Location -> ComputationItem .
+  eq k(lockLoc(L) -> K) lockedLocs(LS) = k(K) lockedLocs(L LS) .
+  
+  ***
+  *** Unlock all global variables
+  ***
+  op unlockGlobals : -> ComputationItem .
+  eq k(unlockGlobals -> K) lockedLocs(LS) store(SFL,[N,LVS]) =
+     k(K) lockedLocs(LS - lvset2lset(LVS)) store(SFL,[N,LVS]) .    
+endfm
+
+fmod ANALYSIS-STATE-FINAL-LOCS is
+  pr LOCATION-SET .
+
+  var X : Id . var Xl : IdList . var K : Computation .
+  var L : Location . var LS : LocationSet .
+  var Env : <Id><Location>Set .
+  
+  op finalLocs : LocationSet -> State [format (r! o)] .
+  
+  op finalizeIdentifiers : IdList -> ComputationItem .
+  eq k(finalizeIdentifiers(X,Xl) -> K) env([X,L] Env) finalLocs(LS) =
+     k(finalizeIdentifiers(Xl) -> K) env([X,L] Env) finalLocs(L LS) .
+  eq k(finalizeIdentifiers(nil) -> K) = k(K) .
+  
+  op unfinalizeIdentifiers : IdList -> ComputationItem .
+  eq k(unfinalizeIdentifiers(X,Xl) -> K) env([X,L] Env) finalLocs(L LS) =
+     k(unfinalizeIdentifiers(Xl) -> K) env([X,L] Env) finalLocs(LS) .
+  eq k(unfinalizeIdentifiers(nil) -> K) = k(K) .
+  
+endfm
+
+fmod ANALYSIS-STATE-OLD-STATE is
+  pr SILF-STATE .
+  
+  op old : State -> State [format (r! o)] .
+
+  vars S S' S'' : State . 
+  vars K K' : Computation .
+  vars SFL SFL' : StackFrameList .
+  vars Env Env' : <Id><Location>Set .
+  
+  ***
+  *** Save the current state, outside of the computation, as the
+  *** "old" state, which we can use later when someone asks
+  *** to evaluate something in the old environment.
+  ***
+  op checkPoint : -> ComputationItem .
+  eq checkPoint = saveCurrentAsOld .
+  op saveCurrentAsOld : -> ComputationItem .
+  eq k(saveCurrentAsOld -> K) old(S') env(Env) store(SFL) = 
+     k(K) old(env(Env) store(SFL)) env(Env) store(SFL) .
+
+  ***
+  *** Evaluate something in the old environment
+  ***  
+  op evalInOld : Computation -> ComputationItem .
+  eq k(evalInOld(K') -> K) old(env(Env') store(SFL')) env(Env) store(SFL) = 
+     k(K' -> restoreState(env(Env) store(SFL)) -> K) old(env(Env') store(SFL')) env(Env') store(SFL') .
+     
+  ***
+  *** Switch back to the saved state.
+  ***
+  op restoreState : State -> ComputationItem .
+  eq k(restoreState(env(Env) store(SFL)) -> K) env(Env') store(SFL') =
+     k(K) env(Env) store(SFL) .
+endfm
+
+fmod UNKNOWN-VALUE is
+  pr STATE-SORTS .
+  
+  op unkv : -> Value .
+  
+  op isUnknownValue : Value -> Bool .
+  eq isUnknownValue(unkv) = true .
+  eq isUnknownValue(V:Value) = false [owise] .
+endfm
+
+fmod POLICY-STATE-HELPERS is
+  pr SILF-HELPING-OPS .
+  pr LOCATION-SET .
+  
+  vars N1 N2 N3 N4 : Nat . 
+  vars LVS1 LVS2 LVS3 LVS4 : <Location><Value>Set .
+  vars SFL SFL' : StackFrameList .
+  var L : Location .
+  vars V V' : Value .
+  var Env : <Id><Location>Set .
+  var LS : LocationSet .
+  var X : Id .
+  var K : Computation .
+  var Ll : LocationList .
+  var Xs : IdList .
+  var PE : PolicyExp .
+  var PPl : PrePostList .
+    
+  ***
+  *** Figure out which locations have different values between two stores.
+  *** We only need to check the bottom and top of the store, since these
+  *** represent the globals (bottom) and current stack frame (top, i.e. list head).
+  ***
+  op getChangedLocs : StackFrameList StackFrameList -> LocationSet .
+  op getChangedLocs : <Location><Value>Set <Location><Value>Set -> LocationSet .
+  eq getChangedLocs( ([N1,LVS1],SFL,[N2,LVS2]), ([N3,LVS3],SFL',[N4,LVS4]) ) = getChangedLocs(LVS1,LVS3) getChangedLocs(LVS2,LVS4) .
+  eq getChangedLocs( ([N1,LVS1]), ([N3,LVS3]) ) = getChangedLocs(LVS1,LVS3) .
+ ceq getChangedLocs( ([L,V] LVS1), ([L,V'] LVS2)) = L getChangedLocs(LVS1, LVS2) if V =/= V' .
+  eq getChangedLocs( LVS1, LVS2 ) = nilLS [owise] .
+  
+  ***
+  *** Policy-specific logic to say when two values are the same
+  ***
+  *** op compareVals : Value -> Bool .
+
+  ***
+  *** Get the identifiers associated with a set of locations
+  ***  
+  op getIdentsForLocs : LocationList <Id><Location>Set -> IdList .
+  eq getIdentsForLocs( (L,Ll), ([X,L] Env)) = X, getIdentsForLocs(Ll, Env) .
+  eq getIdentsForLocs(nil, Env) = nil .
+
+  ***
+  *** Get the values stored in each location
+  ***  
+  op getValPairsForLocs : LocationList StackFrameList StackFrameList -> ValueList .
+  eq getValPairsForLocs( (L,Ll), SFL, SFL') = stackLookup(L,SFL), stackLookup(L,SFL'), getValPairsForLocs(Ll,SFL,SFL') .
+  eq getValPairsForLocs(nil, SFL, SFL') = nil .
+  
+  ***
+  *** Clear out locations
+  ***  
+  op clearLocs : LocationSet -> ComputationItem .
+  eq k(clearLocs(L LS) -> K) = k(clearLocVal -> assignToLoc(L) -> clearLocs(LS) -> K) .
+  eq k(clearLocs(nilLS) -> K) = k(K) .
+  
+  op clearLocVal : -> ComputationItem .
+  
+  ***
+  *** Clear out identifiers
+  ***
+  op clearIdents : IdList -> ComputationItem .
+  eq k(clearIdents(Xs) -> K) env(Env) = k(clearLocs(getLocsForIdents(Xs,Env)) -> K) env(Env) .
+  
+  ***
+  *** Given a list of identifiers, return a set of their locations
+  ***
+  op getLocsForIdents : IdList <Id><Location>Set -> LocationSet .
+  eq getLocsForIdents((X,Xs),([X,L] Env)) = L getLocsForIdents(Xs,([X,L] Env)) .
+  eq getLocsForIdents(nil,Env) = nilLS [owise] .
+  
+  ***
+  *** Given a prepost list, just retrieve preconditions
+  ***
+  op filterForPre : PrePostList -> PrePostList .
+  eq filterForPre(pre(X,PE) PPl) = pre(X,PE) filterForPre(PPl) .
+  eq filterForPre(post(X,PE) PPl) = filterForPre(PPl) .
+  eq filterForPre(mod(X,Xs) PPl) = filterForPre(PPl) .
+  eq filterForPre(noAnns) = noAnns .
+
+  ***
+  *** Given a prepost list, just retrieve postconditions
+  ***
+  op filterForPost : PrePostList -> PrePostList .
+  eq filterForPost(pre(X,PE) PPl) = filterForPost(PPl) .
+  eq filterForPost(post(X,PE) PPl) = post(X,PE) filterForPost(PPl) .
+  eq filterForPost(mod(X,Xs) PPl) = filterForPost(PPl) .
+  eq filterForPost(noAnns) = noAnns .
+
+  ***
+  *** Given a prepost list, just retrieve modifies clauses
+  ***
+  op filterForMod : PrePostList -> PrePostList .
+  eq filterForMod(pre(X,PE) PPl) = filterForMod(PPl) .
+  eq filterForMod(post(X,PE) PPl) = filterForMod(PPl) .
+  eq filterForMod(mod(X,Xs) PPl) = mod(X,Xs) filterForMod(PPl) .
+  eq filterForMod(noAnns) = noAnns .
+  
+  ***
+  *** The value we return when for some reason we fail to return anything, like when
+  *** we call a function or look up a name that does not exist. We make this a computation
+  *** in case determining a value involves other parts of the configuration.
+  ***
+  op noVal : -> Computation .  
+  
+endfm
+
+fmod ANALYSIS-STATE-POLYTYPE is
+  including SILF-STATE .
+  
+  op ptcount : Nat -> State [format (r! o)] .
+endfm
+
+fmod POLYTYPE-HELPERS is
+  including ANALYSIS-STATE-POLYTYPE .
+  including ANALYSIS-STATE-OUTPUT .
+  including POLICY-SORTS .
+  including SILF-PRETTY-PRINTER .
+  including SILF-HELPING-OPS .
+
+  vars N N' : Nat .
+  var PV : PolicyVal .
+  var K : Computation .
+  var LVS : <Location><Value>Set .
+  var SFL : StackFrameList .
+  vars V V' : Value .
+  var L : Location .
+  
+  ***
+  *** Polytype constructor
+  ***
+  op ptype : Nat -> PolicyVal .
+
+  ***
+  *** Check to see if a policy value is a polytype
+  ***
+  op isPType : PolicyVal -> Bool .
+  eq isPType(ptype(N)) = true .
+  eq isPType(PV) = false [owise] .
+  
+  ***
+  *** Pretty-print polytypes
+  ***
+  eq pretty-print(ptype(N)) = "$ptype(" + string(N,10) + ")" .
+  
+  ***
+  *** Polytypes are generated internally, so we should not need 
+  *** to filter them. Add this as a reminder to add filtering 
+  *** logic if we ever make these visible to the end user.
+  ***
+  *** eq pv2pv ...
+  *** eq ta2pv ...
+  
+  ***
+  *** Instantiate a poly type with a real type. This will need
+  *** to change all references to the polytype to whatever
+  *** policy value is assigned to it.
+  ***
+  op instantiatePType : Nat PolicyVal -> ComputationItem .
+ ceq k(instantiatePType(N,PV) -> K) store([N',LVS [L,V]],SFL) =
+     k(instantiatePType(N,PV) -> K) store([N',LVS [L,V']],SFL)
+  if ptype(N) == val2PolicyVal(V) /\ V' := policyVal2Val(PV) .
+  eq k(instantiatePType(N,PV) -> K) store(SFL) =
+     k(val(policyVal2Val(PV)) -> K) store(SFL) [owise] .
+
+  ***
+  *** Generate a new polytype
+  ***
+  op genPolyType : -> ComputationItem .
+  eq k(genPolyType -> K) ptcount(N) = k(val(policyVal2Val(ptype(N))) -> K) ptcount(s(N)) .
+endfm
+
+fmod TVAR-HELPERS is
+  including POLYTYPE-HELPERS .
+  including TYPE-ANNOTATION-HELPERS .
+  
+  var Q : Qid .
+  vars PV PV' PV'' : PolicyVal .
+  vars Vl Vl' Vl'' : ValueList .
+  var K : Computation .
+  vars VMS VMS' : VarMappingSet .
+  vars V V' V'' : Value .
+  var N : Nat .
+
+  ***
+  *** A counter for type variables. This is needed to ensure
+  *** that variables encountered in calls are unique. For instance,
+  *** if two different functions use $U as a type variable we
+  *** need to ensure that they are treated as separate variables.
+  ***
+  op tvcount : Nat -> State [format (r! o)] .
+
+  ***
+  *** Fresh type variables
+  ***
+  op tv : Nat -> TypeVar .
+  
+  ***
+  *** A "placeholder" policy value to go into the var mapping set
+  ***
+  op pholder : -> PolicyVal .
+  
+  ***
+  *** Make sure the type variables are unique. This is done by
+  *** creating a renaming of all variables found in the list,
+  *** performing the renaming, and returning this altered
+  *** version of the value list.
+  ***
+  op makeUnique : ValueList -> ComputationItem .
+  eq k(makeUnique(Vl) -> K) = 
+     k(createAlphaMapping(setify(findTVars(Vl))) -> substVarsT(Vl) -> K) .
+  
+  ***
+  *** Find type variables in the value list. The actual logic
+  *** to explore policy values for type variables is policy specific.
+  ***
+  op findTVars : ValueList -> VarMappingSet .
+  eq findTVars(V,V',Vl) = findTVars(V) findTVars(V',Vl) .
+  eq findTVars(nil) = nil .
+  
+  ***
+  *** Given a set of entries like [Var,pholder],[Var',pholder], etc,
+  *** replace each pholder with a new fresh type variable. When
+  *** complete, save this as the tvar map.
+  ***
+  op createAlphaMapping : VarMappingSet -> ComputationItem .
+  eq k(createAlphaMapping([PV,pholder] VMS) -> K) tvcount(N) =
+     k(createAlphaMapping([PV,tv(N)] VMS) -> K) tvcount(s(N)) .
+  eq k(createAlphaMapping(VMS) -> K) tvcount(N) =
+     k(K) tvcount(N) tvmap(VMS) [owise] .
+      
+  ***
+  *** Add pretty printing logic for type variables
+  ***
+  eq pretty-print($$(Q)) = "$$" + string(Q) .
+  eq pretty-print(tv(N)) = "$$" + string(N,10) .
+  
+  ***
+  *** Add filtering logic for type variables
+  ***
+  eq pv2pv($$(Q)) = $$(Q) .
+  eq pv2pv(tv(N)) = tv(N) .
+  eq ta2pv($$(Q)) = $$(Q) .
+  eq ta2pv(tv(N)) = tv(N) .
+  
+  ***
+  *** Is the policy value a type variable?
+  ***
+  op isTVar : PolicyVal -> Bool .
+  eq isTVar($$(Q)) = true .
+  eq isTVar(tv(N)) = true .
+  eq isTVar(PV) = false [owise] .
+  
+  ***
+  *** Perform some limited inference, building a substitution
+  *** from type variables to actual policy values. Note that
+  *** what we do is VERY limited -- this process could definitely
+  *** be improved in the future.
+  ***
+  op inferVars_from_ : ValueList ValueList -> ComputationItem .
+  op inferVars_from_aux : ValueList ValueList -> ComputationItem .  
+
+  ***
+  *** If we have vars out front, we want to replace the first list with
+  *** the new list. We also need to add the varmap in either case.
+  ***  
+  eq k(val(Vl'') -> (inferVars Vl from Vl') -> K) =
+     k((inferVars Vl'' from Vl' aux) -> K) varmap(nil) .
+  
+  eq k((inferVars Vl from Vl') -> K) =
+     k((inferVars Vl from Vl' aux) -> K) varmap(nil) .
+  
+  eq k((inferVars (V,Vl) from (V',Vl') aux) -> K) =
+     k(checkSubst(findSubst(V,V')) -> (inferVars Vl from Vl' aux) -> K) .
+  
+  eq k((inferVars nil from nil aux) -> K) = k(K) .
+
+  ***
+  *** If these are error cases, they should be handled by the policy.
+  *** 
+  eq k((inferVars nil from (V,Vl') aux) -> K) = k(K) .
+  eq k((inferVars (V,Vl) from nil aux) -> K) = k(K) .
+  
+  ***
+  *** Before adding the substitution(s), ensure they are consistent
+  *** what what we already know.
+  ***      
+  op checkSubst : VarMappingSet -> ComputationItem .
+ ceq k(checkSubst([PV,PV'] VMS) -> K) varmap([PV,PV''] VMS') =
+     k(issueWarning(1,"Attempt to assign inconsistent values " + pretty-print(PV') + " and " + pretty-print(PV'') + " to type variable " + pretty-print(PV) + " in function call.") -> 
+       checkSubst(VMS) -> K) varmap([PV,PV''] VMS')
+  if PV' =/= PV'' .
+  eq k(checkSubst(nil) -> K) = k(K) .
+  eq k(checkSubst([PV,PV'] VMS) -> K) varmap(VMS') = k(checkSubst(VMS) -> K) varmap([PV,PV'] VMS') [owise] .
+  
+  ***
+  *** Finds a var to val substitution; this is defined
+  *** by the policies that use it.
+  ***   
+  op findSubst : Value Value -> VarMappingSet .
+  
+  ***
+  *** Given a mapping, perform the substitution.
+  ***
+  op substVars : ValueList -> ComputationItem .
+  op substVars : -> ComputationItem .
+  eq k(val(Vl) -> substVars -> K) = k(substVars(Vl) -> K) .
+  eq k(substVars(Vl,V) -> K) varmap(VMS) = k(substVars(Vl) -> val(performSubst(V,VMS)) -> K) varmap(VMS) .
+  eq k(substVars(nil) -> K) = k(K) .
+
+  ***
+  *** Given a mapping, perform the substitution.
+  ***
+  op substVarsT : ValueList -> ComputationItem .
+  eq k(substVarsT(Vl,V) -> K) tvmap(VMS) = 
+     k(substVarsT(Vl) -> val(performSubst(V,VMS)) -> K) tvmap(VMS) .
+  eq k(substVarsT(nil) -> K) = k(K) .
+    
+  ***
+  *** Does the actual substitution; again, this is defined
+  *** by the policy
+  ***
+  op performSubst : Value VarMappingSet -> Value .
+
+  ***
+  *** Make sure we have no more type variables; if we do, we still have
+  *** an "unknown" instantiation, so we need to return a default
+  *** of some sort
+  ***
+  op checkForTVars : -> ComputationItem .
+  eq k(val(Vl) -> checkForTVars -> K) = k(val(Vl) -> K) .
+    
+  ***
+  *** Sorts an ops for a mapping from policy values to other
+  *** policy values. This is used here to build a substitution
+  *** using our limited inference functionality for type
+  *** variables.
+  ***
+  sorts VarMapping VarMappingSet .
+  subsort VarMapping < VarMappingSet .
+  
+  op nil : -> VarMappingSet .
+  op __ : VarMappingSet VarMappingSet -> VarMappingSet [assoc comm id: nil] .
+  op [_,_] : PolicyVal PolicyVal -> VarMapping .
+  
+  op _in_ : PolicyVal VarMappingSet -> Bool .
+  eq PV in ([PV,PV'] VMS) = true .
+  eq PV in VMS = false [owise] .
+  
+  op setify : VarMappingSet -> VarMappingSet .
+  eq setify([PV,PV'] [PV,PV'] VMS) = ([PV,PV'] VMS) . 
+  eq setify(VMS) = VMS [owise] .
+  
+  ***
+  *** Store the mappings in the state
+  ***
+  op varmap : VarMappingSet -> State [format (r! o)] .
+  op tvmap : VarMappingSet -> State [format (r! o)] .
+    
+  ***
+  *** Drop the mapping state item
+  ***
+  op dropVarMap : -> ComputationItem .
+  eq k(dropVarMap -> K) varmap(VMS) tvmap(VMS') = k(K) .
+  eq k(val(Vl) -> dropVarMap -> K) varmap(VMS) tvmap(VMS') = k(val(Vl) -> K) .
+  
+endfm  
+  

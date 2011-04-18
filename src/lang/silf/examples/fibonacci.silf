@@ -1,0 +1,21 @@
+function fib(n)
+begin
+  if n = 1 then
+    return 1;
+  else 
+    if n = 2 then
+      return 1;
+    else
+      return fib(n - 1) + fib(n - 2);
+    fi
+  fi
+end
+
+function main(void)
+begin
+  var x; var y;
+  x := read;
+  for y := 1 to x do
+    write fib(y);
+  od
+end

@@ -1,0 +1,68 @@
+***
+*** Declare the types policy values.
+***
+fmod TYPES is 
+  including TYPE-ANNOTATION-HELPERS * ( sort PolicyExp to TypeExp, sort PolicyVal to Type ) .
+  including SILF-HELPING-OPS * ( sort PolicyExp to TypeExp, sort PolicyVal to Type ) .
+  
+  var T : Type .
+ 
+  sort BaseType .
+  subsort BaseType < Type .
+
+  ops $int $bool : -> BaseType .
+  op $notype : -> Type . *** represents case where no type is given
+  op $array : BaseType -> Type .
+  
+  eq pv2pv($('int)) = $int .
+  eq pv2pv($('bool)) = $bool .
+  eq pv2pv($('array) ( T ) ) = $array(pv2pv(T)) .
+
+  eq ta2pv($('int)) = $int .
+  eq ta2pv($('bool)) = $bool .
+  eq ta2pv($('array) ( T ) ) = $array(ta2pv(T)) .
+    
+  op t : Type -> Value .
+  
+  op isArrayType : Type -> Bool .
+  eq isArrayType($array(T)) = true .
+  eq isArrayType(T) = false [owise] .
+  
+endfm
+
+***
+*** Pretty-printer for units; note that we do not pretty print
+*** derived units, just the base units they translate into.
+*** For instance, $hertz would pretty print as "$s ^ -1" .
+***
+fmod TYPES-PRETTY-PRINTER is
+  including SILF-PRETTY-PRINTER *( sort PolicyExp to TypeExp, sort PolicyVal to Type ) .
+  pr TYPES .
+
+  vars T T' : Type .
+  
+  eq pretty-print($int) = "$int" .
+  eq pretty-print($bool) = "$bool" .
+  eq pretty-print($notype) = "$notype" .
+  eq pretty-print($array(T)) = "$array(" + pretty-print(T) + ")" .
+endfm
+
+fmod TYPES-ANALYSIS-STATE is
+  pr ANALYSIS-STATE-OUTPUT .
+  pr POLICY-STATE-HELPERS .
+  including SILF-HELPING-OPS .
+endfm
+
+***
+*** State additions for units
+***
+fmod STATE is
+  including TYPES-ANALYSIS-STATE * ( sort PolicyExp to TypeExp, sort PolicyVal to Type ) .
+  including TYPES-PRETTY-PRINTER .
+  
+  ***
+  *** Function type environment
+  ***
+  op ftenv : <Id><Computation>Set -> State [format (r! o)] .
+endfm
+

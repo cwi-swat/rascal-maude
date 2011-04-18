@@ -1,0 +1,16 @@
+function lb2kg(w)
+  pre(UNITS): @unit(w) = $lb;
+  post(UNITS): @unit(@result) = $lb;
+begin
+  return 10 * w / 22;
+end
+
+function main(void)
+begin
+  var $lb projectileWeight;
+  var $kg weightInKg;
+  projectileWeight := 5;
+  weightInKg := lb2kg(projectileWeight);
+  write projectileWeight;
+  write weightInKg;
+end

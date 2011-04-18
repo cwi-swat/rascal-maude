@@ -1,0 +1,79 @@
+var a[100];
+
+function qsort(l, r)
+begin
+  var i;
+  if (r <= l) then return 0; fi
+  i := partition(l, r);
+  call qsort(l, i - 1);
+  call qsort(i + 1, r);
+  return 0; 
+end
+
+function partition(l, r)
+begin
+  var i; var j; var v; var f;
+  i := l - 1;
+  j := r;
+  v := a[r];
+  f := 1; 
+  while f = 1 do
+    i := i + 1;
+    while a[i] < v do 
+      i := i + 1; 
+    od
+    j := j - 1;
+    while v < a[j] and f = 1 do
+      if j = l then
+        f := 0;
+      else
+        j := j - 1;
+      fi
+    od
+    if i >= j then f := 0; fi
+    if f = 1 then
+      call swap(i,j);
+    fi
+  od
+
+  call swap(i,r);
+  return i;
+end
+
+function swap(i, j)
+begin
+  var t;
+  t := a[i];
+  a[i] := a[j];
+  a[j] := t;
+  return 0;
+end
+
+function display(void)
+begin
+  var c;
+  for c := 0 to 99 do
+    write a[c];
+  od
+  return 0;
+end
+
+function main(void)
+begin
+  var x; var y;
+  y := read;
+  for x := 0 to 99 do
+    a[x] := y;
+    y := y - 1;
+  od
+  call qsort(0, 99);
+  call display();
+  y := read;
+  write 0; write 0; write 0; write 0; 
+  for x := 0 to 99 do
+    a[x] := y;
+    y := y - 1;
+  od
+  call qsort(0, 99);
+  call display();
+end

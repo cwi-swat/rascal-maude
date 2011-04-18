@@ -1,0 +1,67 @@
+function pow(x,y)
+  post(UNITS): @unit(@result) = @unit(x) ^ y;
+end
+
+function sqrt(x)
+  post(UNITS): @unit(@result) ^ 2 = @unit(x);
+end
+
+function lb2kg(w)
+  pre(UNITS): @unit(w) = $lb;
+  post(UNITS): @unit(@result) = $kg;
+begin
+  var rv;
+  rv := 10 * w / 22;
+  assume(UNITS): @unit(rv) = $kg;
+  return rv;
+end
+
+function distance(x1,y2,x2,y2)
+  pre(UNITS): @unit(x1) = @unit(x2) = @unit(y1) = @unit(y2);
+  post(UNITS): @unit(@result) = @unit(x1);
+begin
+  return sqrt(pow(x2-x1, 2) + pow(y2-y1, 2));
+end
+
+#//@ post(UNITS): @unit(@result) ^ 2 = @unit(energy) (@unit(weight) ^ -1)
+#double energy2speed(double energy, double weight) {
+#  return sqrt(2 * energy / weight);
+#}
+
+#//@ pre(UNITS): @unit(speed) ^ 2 = @unit(dist) @unit(g)
+#double projectiletangentangle(double dist, double speed, double g) {
+#  double dx, dy;
+#  dx = speed * speed + sqrt(pow(speed, 4) - pow(dist * g, 2));
+#  dy = dist * g;
+#  return dx/dy;
+#}
+
+function main(void)
+begin
+  var projectilex;
+  var projectiley;
+  var targetx;
+  var targety;
+  var dist;
+  var projectileweight;
+  var energy;
+  var speed;
+  var g;
+  var result;
+  
+  result := 3;
+
+  return 0;
+#  double projectilex = 0;       /*@ assume(UNITS): @unit(projectilex) = $meter */
+#  double projectiley = 0;       /*@ assume(UNITS): @unit(projectiley) = @unit(projectilex) */
+#  double targetx = 17;          /*@ assume(UNITS): @unit(targetx) = @unit(projectilex) */
+#  double targety = 21;          /*@ assume(UNITS): @unit(targety) = @unit(projectiley) */
+#  double dist = distance(projectilex, projectiley, targetx, targety);
+#  double projectileweight = 5;  /*@ assume(UNITS): @unit(projectileweight) = $lb */
+#  double energy = 2560;         /*@ assume(UNITS): @unit(energy) = $kg $meter ^ 2 $second ^ -2 */
+#  double speed = energy2speed(energy, lb2kg(projectileweight));
+#  double g = 9.8;                /*@ assume(UNITS): @unit(g) = $meter $second ^ -2 */ 
+#  double result ;
+#  result = projectiletangentangle(dist, speed, g);
+#}
+end

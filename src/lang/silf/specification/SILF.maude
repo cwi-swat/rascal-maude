@@ -1,0 +1,271 @@
+in SILF-syntax .
+in SILF-state .
+
+***
+*** SILF Semantics: Declarations
+***
+fmod DECL-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including DECLARATION .
+
+  var X : Id . var N : Int . var K : Computation .
+  var D : Decl . var DL : DeclList .
+
+  eq k(decl(var X) -> K) = k(bind(X) -> K) .
+  eq k(decl(var X[#(N)]) -> K) = k(val(int(N)) -> bindBlock(X) -> K) .
+  
+ ceq decl(D DL) = decl(D) -> decl(DL) if DL =/= noDecls .
+  eq k(decl(noDecls) -> K) = k(K) .
+endfm
+
+***
+*** SILF Semantics: Lookups/Simple Expressions
+***
+fmod LOOKUP-SEMANTICS is
+  including SILF-HELPING-OPS .
+
+  var N : Int . var X : Id . var K : Computation . var L : Location .
+  var E : Exp . var Env : <Id><Location>Set . var B : Bool .
+
+  eq exp(#(N)) = val(int(N)) .
+  eq exp(b(B)) = val(bool(B)) .
+  eq k(exp(X) -> K) env(Env [X,L]) = k(lookupLoc(L) -> K) env(Env [X,L]) .
+  eq k(exp(X[E]) -> K) = k(exp(E) -> lookupOffset(X) -> K) .
+endfm
+
+***
+*** SILF Semantics: Arithmetic operations
+***
+fmod ARITH-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including EXPRESSION .
+
+  ops + - * / % u- : -> ComputationItem .
+
+  vars E E' : Exp . vars I I' : Int .
+
+  eq exp(E + E') = exp(E,E') -> + .
+  eq val(int(I),int(I')) -> + = val(int(I + I')) .
+  eq exp(E - E') = exp(E,E') -> - .
+  eq val(int(I),int(I')) -> - = val(int(I - I')) .
+  eq exp(E * E') = exp(E,E') -> * .
+  eq val(int(I),int(I')) -> * = val(int(I * I')) .
+  eq exp(E / E') = exp(E,E') -> / .
+  eq val(int(I),int(I')) -> / = val(int(I quo I')) .
+  eq exp(E % E') = exp(E,E') -> % .
+  eq val(int(I),int(I')) -> % = val(int(I rem I')) .
+  eq exp(- E) = exp(E) -> u- .
+  eq val(int(I)) -> u- = val(int(- I)) .
+endfm
+
+***
+*** SILF Semantics: Relational operations
+***
+fmod RELATIONAL-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including EXPRESSION .
+
+  ops lt lte gt gte eq neq : -> ComputationItem .
+
+  vars E E' : Exp . vars I I' : Int .
+
+  eq exp(E < E') = exp(E,E') -> lt .
+  eq val(int(I),int(I')) -> lt = val(bool(I < I')) .
+  eq exp(E <= E') = exp(E,E') -> lte .
+  eq val(int(I),int(I')) -> lte = val(bool(I <= I')) .
+  eq exp(E > E') = exp(E,E') -> gt .
+  eq val(int(I),int(I')) -> gt = val(bool(I > I')) .
+  eq exp(E >= E') = exp(E,E') -> gte .
+  eq val(int(I),int(I')) -> gte = val(bool(I >= I')) .
+  eq exp(E = E') = exp(E,E') -> eq .
+  eq val(int(I),int(I')) -> eq = val(bool(I == I')) .
+  eq exp(E != E') = exp(E,E') -> neq .
+  eq val(int(I),int(I')) -> neq = val(bool(I =/= I')) .
+endfm
+
+***
+*** SILF Semantics: Logical operations
+***
+fmod LOGICAL-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including EXPRESSION .
+
+  ops and or not : -> ComputationItem .
+
+  vars E E' : Exp . vars B B' : Bool .
+
+  eq exp(E and E') = exp(E,E') -> and .
+  eq val(bool(B),bool(B')) -> and = val(bool(B and B')) .
+  eq exp(E or E') = exp(E,E') -> or .
+  eq val(bool(B),bool(B')) -> or = val(bool(B or B')) .
+  eq exp(not E) = exp(E) -> not .
+  eq val(bool(B)) -> not = val(bool(not B)) .
+endfm
+
+***
+*** SILF Semantics: Assignment
+***
+fmod ASSIGNMENT-SEMANTICS is 
+  including SILF-HELPING-OPS .
+  including STATEMENT .
+
+  var I : Id . vars E E' : Exp .
+  eq stmt(I := E) = exp(E) -> assignTo(I) .
+  eq stmt(_:=_(_`[_`](I,E),E')) = exp(E,E') -> arrayAssign(I) .
+endfm
+
+***
+*** SILF Semantics: Conditionals
+***
+fmod CONDITIONAL-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including STATEMENT .
+
+  var E : Exp . vars St Sf : StmtList . vars K Kt Kf : Computation .
+  vars Dt Df : DeclList . var Env : <Id><Location>Set .
+  
+  op skip : -> Stmt .
+  eq if_then__fi(E,Dt,St) = if_then__else__fi(E,Dt,St,noDecls,skip) .
+  eq k(stmt(skip) -> K) = k(K) .
+
+  op if : Computation Computation -> ComputationItem .
+  eq k(stmt(if_then__else__fi(E,Dt,St,Df,Sf)) -> K) env(Env) = 
+     k(exp(E) -> if((decl(Dt) -> stmt(St) -> restoreEnv(Env)),(decl(Df) -> stmt(Sf) -> restoreEnv(Env))) -> K) env(Env) .
+  eq val(bool(true)) -> if(Kt,Kf) = Kt .
+  eq val(bool(false)) -> if(Kt,Kf) = Kf .
+endfm
+
+***
+*** SILF Semantics: Loops
+***
+fmod LOOP-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including STATEMENT .
+
+  vars E E' : Exp . var Sl : StmtList . vars K Ke Ks : Computation .
+  var X : Id . var Dl : DeclList . var Env : <Id><Location>Set .
+
+  eq for_:=_to_do__od(X,E,E',Dl,Sl) = 
+     (X := E) (while (X <= E') do Dl Sl (X := X + #(1)) od) .
+
+  op while : Computation Computation -> ComputationItem .
+  eq k(stmt(while E do Dl Sl od) -> K) env(Env) = 
+     k(exp(E) -> while(exp(E),decl(Dl) -> stmt(Sl) -> restoreEnv(Env)) -> K) env(Env)  .
+  eq val(bool(true)) -> while(Ke,Ks) = Ks -> Ke -> while(Ke,Ks) .
+  eq val(bool(false)) -> while(Ke,Ks) -> K = K .
+endfm
+
+***
+*** SILF Semantics: I/O
+***
+fmod IO-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including STATEMENT .
+
+  var N : Int . var Ns : IntList . var E : Exp . var K : Computation .
+
+  eq k(exp(read) -> K) in(N,Ns) = k(val(int(N)) -> K) in(Ns) .
+
+  op write : -> ComputationItem .
+  eq stmt(write E) = exp(E) -> write .
+  eq k(val(int(N)) -> write -> K) out(Ns) = k(K) out(Ns,N) .
+endfm
+
+***
+*** SILF Semantics: Sequential Composition
+***
+fmod COMP-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including STATEMENT .
+
+  var S : Stmt . var Sl : StmtList . var K : Computation .
+  
+ ceq stmt(S Sl) = stmt(S) -> stmt(Sl) if Sl =/= nil .
+  eq k(stmt(nil) -> K) = k(K) .
+endfm
+
+***
+*** SILF Semantics: Functions
+***
+fmod FUNCTION-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including FUNCTION-DECLARATION .
+
+  var X : Id . var Xs : IdList . var S : Stmt . vars K K' : Computation .
+  var ICS : <Id><Computation>Set . var El : ExpList . var Vl : ValueList .
+  var ECL : <<Id><Location>Set><Computation>List . 
+  vars Env Env' GEnv : <Id><Location>Set .
+  var E : Exp . var V : Value . var SF : StackFrame . 
+  var SFL : StackFrameList . var N : Nat . var Sl : StmtList .
+  var Dl : DeclList . var PPl : PrePostList .
+
+  eq k(fdecl(function X(Xs) PPl begin Dl Sl end) -> K) fenv(ICS) =
+     k(K) fenv(ICS [X,(bind(Xs) -> check(PPl) -> decl(Dl) -> inline(PPl,Sl))]) .
+
+  op check : PrePostList -> ComputationItem .
+  op inline : PrePostList StmtList -> ComputationItem .
+  
+  eq k(check(PPl) -> K) = k(K) .
+  eq k(inline(PPl,Sl) -> K) = k(stmt(Sl) -> K) .
+  
+  eq exp(X()) = exp(X(nil)) .
+  eq stmt(call X()) = stmt(call X(nil)) .
+  eq exp(X(El)) = exp(El) -> apply(X) .
+  eq stmt(call X(El)) = exp(El) -> apply(X) -> discard .
+  
+  op apply : Id -> ComputationItem .
+  eq k(val(Vl) -> apply(X) -> K) fstack(ECL) env(Env) fenv(ICS [X,K']) genv(GEnv) store(SFL) nextLoc(loc(N)) =
+     k(val(Vl) -> K') fstack([Env,K], ECL) env(GEnv) fenv(ICS [X,K']) genv(GEnv) store([N,nil], SFL) nextLoc(loc(N)) .
+
+  op return : -> ComputationItem .
+  eq stmt(return E) = exp(E) -> return .
+  eq k(val(V) -> return -> K) fstack([Env,K'], ECL) env(Env') store(SF, SFL) =
+     k(val(V) -> K') fstack(ECL) env(Env) store(SFL) .
+endfm
+
+***
+*** SILF Semantics: Programs
+***
+fmod PROGRAM-SEMANTICS is
+  including SILF-HELPING-OPS .
+  including PROGRAM .
+
+  var S : Stmt . var FDS : FunDeclSet . vars FD FD' : FunDecl .
+  vars Env GEnv : <Id><Location>Set . var K : Computation . var Dl : DeclList .
+
+  eq k(pgm(Dl FDS)) = k(decl(Dl) -> mkGenv -> fdecl(FDS) -> stmt(call n('main)())) .
+  eq k(pgm(FDS)) = k(fdecl(FDS) -> stmt(call n('main)())) .
+  
+  op mkGenv : -> ComputationItem .
+  eq k(mkGenv -> K) env(Env) genv(GEnv) = k(K) env(Env) genv(Env) .
+
+  eq fdecl(FD FD' FDS) = fdecl(FD) -> fdecl(FD' FDS) .
+endfm
+
+fmod SILF-SEMANTICS is
+  including SILF-SYNTAX .
+  including SILF-STATE .
+  including SILF-HELPING-OPS .
+  including DECL-SEMANTICS .
+  including LOOKUP-SEMANTICS .
+  including ARITH-SEMANTICS .
+  including RELATIONAL-SEMANTICS .
+  including LOGICAL-SEMANTICS .
+  including ASSIGNMENT-SEMANTICS .
+  including CONDITIONAL-SEMANTICS .
+  including LOOP-SEMANTICS .
+  including IO-SEMANTICS .
+  including COMP-SEMANTICS .
+  including FUNCTION-SEMANTICS .
+  including PROGRAM-SEMANTICS .
+
+  var P : Pgm . var Nl : IntList .
+
+  op eval : Pgm IntList -> IntList .
+  eq eval(P,Nl) = get-output(k(pgm(P)) fstack(nil) env(nil) genv(nil) fenv(nil) in(Nl)
+                  out(nil) store([0,nil]) nextLoc(loc(0))) .
+
+  op get-output : SStateItemSet -> IntList .
+  eq get-output(out(Nl) k(nil) AS:SStateItemSet) = Nl .
+endfm
+

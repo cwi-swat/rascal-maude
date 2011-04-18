@@ -1,0 +1,14 @@
+function $kg lb2kg($lb w)
+begin
+  return cast (10 * w / 22) to ($kg);
+end
+
+function main(void)
+begin
+  var $lb projectileWeight;
+  var $kg weightInKg;
+  projectileWeight := 5;
+  weightInKg := lb2kg(projectileWeight);
+  write projectileWeight;
+  write weightInKg;
+end

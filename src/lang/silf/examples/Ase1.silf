@@ -1,0 +1,13 @@
+function $int f($int x)
+begin
+  return x + 1;
+end
+function $int main(void)
+begin
+  var $int x; 
+  x := 3; 
+  x := f(x); 
+  x := f(x,x);
+  if x then write 1; else write 2; fi
+  if (x < 5) then write 1; else write false; fi
+end

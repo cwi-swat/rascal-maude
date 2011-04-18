@@ -1,0 +1,11 @@
+#
+# Here, we accidentally use m, not n
+# 
+function $int factorial($int n)
+begin
+  if n = 0 then
+    return 1;
+  else
+    return n * factorial(m - 1);
+  fi
+end

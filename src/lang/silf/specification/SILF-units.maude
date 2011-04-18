@@ -1,0 +1,133 @@
+in units .
+
+fmod UNITS-FOR-SILF is 
+  including STATE-SORTS .
+  including UNITS-TA-FILTER .
+  including SILF-HELPING-OPS * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+
+  ***
+  *** Add a new constructor -- this allows SILF integers
+  *** to be used as exponents.
+  op _^_ : BaseUnit Integer -> Unit [prec 10 ] .
+  op _^_ : Unit Integer -> Unit [ditto] .
+
+  ***
+  *** All units to be used as values
+  ***
+  op u : Unit -> Value .
+        
+  ***
+  *** Remove # wrapper on integers
+  ***
+  eq (U:Unit) ^ #(I:Int) = (U:Unit) ^ I:Int .
+endfm
+
+fmod UNITS-ANALYSIS-STATE is
+  pr ANALYSIS-STATE-OUTPUT .
+  pr POLICY-STATE-HELPERS .
+  including SILF-HELPING-OPS .
+  pr ANALYSIS-STATE-POLYTYPE .
+  pr POLYTYPE-HELPERS .
+endfm
+
+***
+*** State additions for units
+***
+fmod STATE is
+  including UNITS-ANALYSIS-STATE * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+  including UNITS-FOR-SILF .
+  including UNITS-PRETTY-PRINTER .
+
+  var K : Computation . 
+  var N : Nat .
+  var U : Unit .
+  
+  ***
+  *** Function type environment
+  ***
+  op ftenv : <Id><Computation>Set -> State [format (r! o)] .
+
+  ***
+  *** Fresh unit counter
+  ***
+  op c : Nat -> State [format (r! o)] . *** new unit counter
+    
+  ***
+  *** Generate fresh units
+  ***
+  op genFreshUnit : -> ComputationItem .
+  eq k(genFreshUnit -> K) c(N) = k(val(u(NUnit(N))) -> K) c(s(N)) .
+  
+  ***
+  *** Move back and forth from values to policy values
+  ***
+  eq policyVal2Val(U) = u(U) .
+  eq val2PolicyVal(u(U)) = U .
+endfm
+
+***
+*** State additions for units
+***
+fmod STATE-WTVARS is
+  including STATE .
+  including TVAR-HELPERS * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+
+  vars U U' : Unit .
+  var Q : Qid .
+  var M : Rat .
+  var N : Nat .
+  var VMS : VarMappingSet .
+  
+  ***
+  *** Find substitutions for type variables. We just handle two
+  *** basic cases -- either $$V is paired with a unit, or $$V^M
+  *** is paired with a unit. We don't try to solve more difficult
+  *** cases, such as $$V $$U being paired with a unit.
+  ***
+  eq findSubst(u($$(Q)),u(U)) = [$$(Q),U] .
+  eq findSubst(u($$(Q) ^ M),u(U)) = [$$(Q),U ^ (1 / M)] .
+  eq findSubst(u(tv(N)),u(U)) = [tv(N),U] .
+  eq findSubst(u(tv(N) ^ M),u(U)) = [tv(N),U ^ (1 / M)] .
+  eq findSubst(u(U),u(U')) = nil [owise] .
+  
+  ***
+  *** Perform substitutions given a substitution map.
+  ***
+  eq performSubst(u(U),VMS) = u(performUnitSubst(U,VMS)) .
+
+  ***
+  *** Do the actual unit var -> unit substitutions.
+  ***  
+  op performUnitSubst : Unit VarMappingSet -> Unit .
+  eq performUnitSubst(U U',VMS) = performUnitSubst(U,VMS) performUnitSubst(U',VMS) .
+  eq performUnitSubst(U ^ M,VMS) = performUnitSubst(U,VMS) ^ M .
+  eq performUnitSubst($$(Q), ([$$(Q),U] VMS)) = U .
+  eq performUnitSubst(tv(N), ([tv(N),U] VMS)) = U .
+  eq performUnitSubst(U,VMS) = U [owise] .
+  
+  ***
+  *** Find the actual type variables in the value list
+  ***
+  eq findTVars(u(U)) = findUnitTVars(U) .
+  
+  op findUnitTVars : Unit -> VarMappingSet .
+  eq findUnitTVars(U U') = findUnitTVars(U) findUnitTVars(U') .
+  eq findUnitTVars(U ^ M) = findUnitTVars(U) .
+  eq findUnitTVars($$(Q)) = [$$(Q), pholder] .
+  eq findUnitTVars(tv(N)) = [tv(N), pholder] .
+  eq findUnitTVars(U) = nil [owise] .
+  
+endfm
+
+***
+*** State additions for unit assume/assert annotations
+***
+fmod STATE-WCANN is
+  including STATE-WTVARS .
+  including BASE-LOGIC-LANGUAGE * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+  including ANALYSIS-STATE-LOCKED-LOCS .
+  including ANALYSIS-STATE-FINAL-LOCS .
+  including ANALYSIS-STATE-OLD-STATE .
+  including POLICY-STATE-HELPERS * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+endfm
+  

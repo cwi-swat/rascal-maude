@@ -1,0 +1,277 @@
+in policy-basics .
+
+***
+*** Syntactic category: identifiers, identifier lists
+***
+fmod IDENTIFIER is
+  including QID . 
+  including RASCAL-LOCATION .
+
+  sorts Id IdList .
+  subsort Id < IdList .
+  
+  op nil : -> IdList .
+  op _,_ : IdList IdList -> IdList [assoc prec 60 id: nil] .
+  op void : -> IdList .
+  eq void = nil .
+  
+  op n : Qid -> Id .
+endfm
+
+***
+*** Syntactic category: integers
+***
+fmod INTEGER is
+  including INT .
+  including RASCAL-LOCATION .
+
+  sort Integer .
+  op # : Int -> Integer .
+endfm
+
+***
+*** Syntactic category: booleans
+***
+fmod BOOLEAN is
+  including BOOL .
+  including RASCAL-LOCATION .
+
+  sort Boolean .
+  op b : Bool -> Boolean .
+endfm
+
+***
+*** Syntactic category: strings
+***
+fmod SILF-STRING is
+  including STRING .
+  sort SilfString .
+  op s : String -> SilfString .
+endfm
+
+***
+*** Syntax extensions for identifiers with types
+***
+fmod TYPED-IDENTIFIER is
+  including TYPE-ANNOTATION .
+  including IDENTIFIER .
+  including RASCAL-LOCATION .
+  
+  sorts TypedId TypedIdList .
+  op __ : TypeAnn Id -> TypedId .
+  op __ : PolicyVal Id -> TypedId .
+  
+  subsort TypedId < TypedIdList .
+  op nil : -> TypedIdList .
+  op _,_ : TypedIdList TypedIdList -> TypedIdList [assoc id: nil] .
+endfm
+
+***
+*** Syntactic category: declarations, declaration lists
+***
+fmod DECLARATION is
+  including TYPED-IDENTIFIER .
+  including INTEGER .
+  including RASCAL-LOCATION .
+
+  sorts Decl DeclList .
+  subsort Decl < DeclList .
+  
+  op noDecls : -> DeclList .
+  op __ : DeclList DeclList -> DeclList [assoc id: noDecls] .
+  
+  op var_ : TypedId -> Decl [prec 2] .
+  op var_[_] : TypedId Integer -> Decl [prec 1] .
+
+  op locatedDecl : Decl RLocation -> Decl .
+endfm
+
+***
+*** Syntactic category: expressions, expression lists
+***
+fmod EXPRESSION is
+  including IDENTIFIER .
+  including INTEGER .
+  including BOOLEAN .
+  including TYPE-ANNOTATION .
+  including RASCAL-LOCATION .
+  
+  sorts Exp ExpList .
+  subsorts Id Integer Boolean < Exp < ExpList .
+  subsort IdList < ExpList .
+
+  op nil : -> ExpList .
+  op _,_ : ExpList ExpList -> ExpList [ditto] .
+  
+  ops _+_ _-_ : Exp Exp -> Exp [prec 36 gather(E e)] .
+  ops _*_ _/_ _%_ : Exp Exp -> Exp [prec 35 gather(E e)] .
+  ops -_ : Exp -> Exp [prec 34] .
+  ops _<_ _<=_ _>_ _>=_ _=_ _!=_ : Exp Exp -> Exp [prec 37 gather(E e)] .
+  ops _and_ _or_ : Exp Exp -> Exp [prec 39 gather(E e)] .
+  op not_ : Exp -> Exp [prec 38] .
+  
+  op _`(_`) : Id ExpList -> Exp [prec 30] .
+  op _`(`) : Id -> Exp [prec 30] .
+  op _[_]   : Id Exp -> Exp [prec 31] .
+  op read   : -> Exp .
+  op cast_to`(_`) : Exp PolicyVal -> Exp .
+
+  op locatedExp : Exp RLocation -> Exp .
+endfm
+
+***
+*** Syntax for invariants
+***
+fmod INVARIANTS is
+  including POLICY-SORTS .
+  pr IDENTIFIER .  
+  including RASCAL-LOCATION .
+
+  sorts Invariant InvariantList .
+  subsort Invariant < InvariantList .
+  
+  op noInvs : -> InvariantList .
+  op __ : InvariantList InvariantList -> InvariantList [assoc id: noInvs] .
+  
+  op invariant : Id PolicyExp -> Invariant .  
+endfm
+
+***
+*** Syntactic category: statements, statement lists
+*** Note: parsing for _[_]:=_ is ambiguous if we
+*** have an array access in the expression, as in
+*** a[b] := c[d], but it resolves correctly, even
+*** though it gives a warning.
+***
+fmod STATEMENT is
+  including EXPRESSION .
+  including DECLARATION .
+  including INVARIANTS .
+  including RASCAL-LOCATION .
+  
+  sorts Stmt StmtList .
+  subsort Stmt < StmtList .
+  
+  op nil : -> StmtList .
+  op __ : StmtList StmtList -> StmtList [assoc id: nil] .
+  
+  op _:=_ : Id Exp -> Stmt [prec 50] .
+  op _[_]:=_ : Id Exp Exp -> Stmt [prec 50] .
+  op if_then__fi : Exp DeclList StmtList -> Stmt [prec 50] .
+  op if_then__else__fi : Exp DeclList StmtList DeclList StmtList -> Stmt [prec 50] .
+  op for_:=_to__do__od : Id Exp Exp InvariantList DeclList StmtList -> Stmt [prec 50] .
+  op while__do__od : Exp InvariantList DeclList StmtList -> Stmt [prec 50] .
+  op call_`(_`) : Id ExpList -> Stmt [prec 50] .
+  op call_`(`) : Id -> Stmt [prec 50] .
+  op return_ : Exp -> Stmt [prec 50] .
+  op write_ : Exp -> Stmt [prec 50] .
+
+  op locatedStmt : Stmt RLocation -> Stmt .
+endfm
+
+***
+*** Directives. These come in from outside, but are not actually
+*** statements. 
+***
+fmod DIRECTIVE is
+  including STATEMENT .
+  
+  sort Directive .
+  
+  ***
+  *** Line number directive.
+  ***
+  op #PFLine_ : Int -> Directive [format (n d d)] .  
+  
+  ***
+  *** Turn directives into statements or declarations
+  ***
+  op dir2stmt : Directive -> Stmt .
+  op dir2decl : Directive -> Decl .
+endfm
+
+***
+*** Syntax for policy annotation statements.
+***
+fmod POLICY-SYNTAX is
+  including STATEMENT .
+  including POLICY-SORTS .
+  
+  op assume : Id PolicyExp -> Stmt .
+  op assert : Id PolicyExp -> Stmt .
+  
+  op @result : -> Id .
+endfm
+
+***
+*** Syntactic category: function header annotations
+***
+fmod FUNCTION-ANNOTATION is
+  including IDENTIFIER .
+  including POLICY-SORTS .
+  including RASCAL-LOCATION .
+
+  sorts PrePost PrePostList .
+  subsort PrePost < PrePostList .
+  
+  op noAnns : -> PrePostList .
+  op __ : PrePostList PrePostList -> PrePostList [assoc id: noAnns] .
+  
+  op pre : Id PolicyExp -> PrePost .
+  op post : Id PolicyExp -> PrePost .
+  op mod : Id IdList -> PrePost .
+endfm
+  
+***
+*** Syntactic category: function declarations
+***
+fmod FUNCTION-DECLARATION is
+  including TYPED-IDENTIFIER .
+  including DECLARATION .
+  including STATEMENT .
+  including FUNCTION-ANNOTATION .
+  including RASCAL-LOCATION .
+  
+  sorts FunDecl FunDeclSet .
+  subsort FunDecl < FunDeclSet .
+
+  op nil : -> FunDeclSet .
+  op __ : FunDeclSet FunDeclSet -> FunDeclSet [assoc comm id: nil] .
+  
+  op function_`(_`)_begin__end : TypedId TypedIdList PrePostList DeclList StmtList -> FunDecl .
+
+  op locatedFunDecl : FunDecl RLocation -> FunDecl .
+endfm
+
+***
+*** Syntactic category: programs
+***
+fmod PROGRAM is
+  including STATEMENT .
+  including FUNCTION-DECLARATION .
+  including RASCAL-LOCATION .
+  
+  sort Pgm .
+  subsort FunDeclSet < Pgm .
+  op __ : DeclList FunDeclSet -> Pgm .
+
+  op locatedPgm : Pgm RLocation -> Pgm .
+endfm
+
+***
+*** Put all the syntax together
+***
+fmod SILF-SYNTAX is
+  including IDENTIFIER .
+  including INTEGER .
+  including BOOLEAN .
+  including SILF-STRING .
+  including DECLARATION .
+  including EXPRESSION .
+  including STATEMENT .
+  including POLICY-SYNTAX .
+  including FUNCTION-DECLARATION .
+  including PROGRAM .
+  including DIRECTIVE .
+endfm
+

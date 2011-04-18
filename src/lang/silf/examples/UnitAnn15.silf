@@ -1,0 +1,11 @@
+#
+# In cases where an undefined name is used,
+# a fresh unit should be generated.
+#
+function main(void)
+begin
+  var x;
+  assume(UNITS): @unit(x) = $m;
+  write x + z; # two errors: z does not exist, x and z have different units
+  write x * z; # should be fine, but will give an error on z not existing
+end

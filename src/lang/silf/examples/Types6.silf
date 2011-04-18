@@ -1,0 +1,22 @@
+#
+# Here, function main misspells factorial,
+# 
+function $int factorial($int n)
+begin
+  if n = 0 then
+    return 1;
+  else
+    return n * factorial(n - 1);
+  fi
+end
+
+function $int main(void)
+begin
+  var $int x; 
+  x := read;
+  while (x > 0) do
+    write factoril(x);
+    x := read;
+  od
+  return 0;
+end

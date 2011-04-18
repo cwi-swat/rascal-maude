@@ -1,0 +1,164 @@
+***
+*** Policy Basics includes functionality usable across multiple policy frameworks.
+***
+*** This includes concepts such as PolicyVal and PolicyExp, type annotations,
+*** pretty printers, and a basic logic language for use in annotation expressions.
+***
+
+***
+*** Locations used for error tagging
+***
+fmod RASCAL-LOCATION is
+  including STRING .
+  including INT .
+
+  sort RLocation .
+
+  op sl : String Int Int Int Int Int Int -> RLocation .
+endfm
+
+***
+*** Sorts used for analysis policies
+***
+fmod POLICY-SORTS is
+  protecting RASCAL-LOCATION .
+  sorts PolicyVal PolicyExp .
+endfm
+    
+***
+*** Syntax extensions for type annotations
+***
+fmod TYPE-ANNOTATION is
+  extending POLICY-SORTS .
+  protecting QID .
+  
+  sorts TypeAnn TypeVar TypeAnnList .
+  subsort TypeVar < TypeAnn .
+  subsort TypeAnn < PolicyVal .
+  subsort TypeAnn < TypeAnnList .
+  
+  op $ : Qid -> TypeAnn .
+  op $$ : Qid -> TypeVar .
+  op noType : -> TypeAnn .
+  op __ : TypeAnn TypeAnn -> TypeAnn [assoc comm prec 15] .
+  
+  eq noType noType = noType .
+  
+  op nil : -> TypeAnnList .
+  op _,_ : TypeAnnList TypeAnnList -> TypeAnnList [assoc id: nil] .
+endfm
+
+***
+*** Operators for working with type annotations
+***
+fmod TYPE-ANNOTATION-HELPERS is
+  including TYPE-ANNOTATION .
+  
+  ***
+  *** Covert a type annotation into a policy value
+  ***
+  op ta2pv : TypeAnn -> PolicyVal .
+
+  ***
+  *** Convert a policy value using wrapped annotations
+  *** into one using just other policy values.
+  ***
+  op pv2pv : PolicyVal -> PolicyVal .
+endfm
+
+***
+*** A general pretty-printer
+***
+fmod PRETTY-PRINT is
+  including TYPE-ANNOTATION .
+
+  var Q : Qid .
+  vars TA TA' : TypeAnn .
+  var L : RLocation .
+  var PV : PolicyVal .
+  
+  ***
+  *** Pretty print operations for policy expressions
+  *** and values.
+  ***  
+  op pretty-print : PolicyExp -> String .
+  op pretty-print : PolicyVal -> String .
+  
+  ***
+  *** Pretty-print type annotations
+  ***
+  eq pretty-print($(Q)) = "$" + string(Q) .
+  eq pretty-print($$(Q)) = "$$" + string(Q) .
+  eq pretty-print(noType) = "" .
+  eq pretty-print(TA TA') = pretty-print(TA) + " " + pretty-print(TA') .
+endfm  
+
+***
+*** A base logic language
+***
+fmod BASE-LOGIC-LANGUAGE is
+  including POLICY-SORTS .
+  including PRETTY-PRINT .
+  
+  vars P P' : PolicyVal .
+  vars PE PE' : PolicyExp .
+  vars PV PV' : PolicyVal .
+  
+  ***
+  *** Base logical operators
+  ***
+  op _and_ : PolicyExp PolicyExp -> PolicyExp [assoc prec 55] .
+  op _/\_ : PolicyExp PolicyExp -> PolicyExp [assoc prec 55] .
+  eq PE /\ PE' = PE and PE' .
+
+  op _or_ : PolicyExp PolicyExp -> PolicyExp [assoc prec 59] .
+  op _\/_ : PolicyExp PolicyExp -> PolicyExp [assoc prec 59] .
+  eq PE \/ PE' = PE or PE' .
+
+  op _implies_ : PolicyExp PolicyExp -> PolicyExp [prec 61 gather (e E)] .
+  op _->_ : PolicyExp PolicyExp -> PolicyExp [prec 61 gather (e E)] .
+  eq PE -> PE' = PE implies PE' .
+
+  op not_ : PolicyExp -> PolicyExp [prec 53] .
+  op !_ : PolicyExp -> PolicyExp [prec 53] .
+  eq ! PE = not PE .
+
+  ***
+  *** Checks for logical equality/assignment
+  ***
+  op _=_ : PolicyVal PolicyVal -> PolicyExp [prec 50] .
+  op _=_ : PolicyVal PolicyExp -> PolicyExp [prec 52 gather (e E)] .
+
+  ***
+  *** Change more complex assignments (a = b = c = d = ...)
+  *** into multiple assignments separated by and. We need to
+  *** do these in the right order, so "a = b = c" needs to
+  *** be "b = c and a = b".
+  ***
+  op trans : PolicyExp -> PolicyExp .
+  eq trans(P = PE) = trans(PE) and (P = firstPVal(PE)) .
+  eq trans(P = P') = P = P' .
+
+  op firstPVal : PolicyExp -> PolicyVal .
+  eq firstPVal(P = PE) = P .
+  eq firstPVal(P = P') = P .
+
+  ***
+  *** Can use just "True" and "False" in equations if need be.
+  ***
+  ops @True @False @T @F : -> PolicyExp .
+  eq @T = @True .
+  eq @F = @False .
+  
+  ***
+  *** Pretty-print policy expressions
+  ***
+  eq pretty-print(PE and PE') = pretty-print(PE) + " and " + pretty-print(PE') .
+  eq pretty-print(PE or PE') = pretty-print(PE) + " or " + pretty-print(PE') .
+  eq pretty-print(PE implies PE') = pretty-print(PE) + " implies " + pretty-print(PE') .
+  eq pretty-print(not PE) = "not " + pretty-print(PE) .
+  eq pretty-print(PV = PV') = pretty-print(PV) + " = " + pretty-print(PV') .
+  eq pretty-print(PV = PE) = pretty-print(PV) + " = " + pretty-print(PE) .
+  eq pretty-print(@True) = "true" .
+  eq pretty-print(@False) = "false" .
+endfm

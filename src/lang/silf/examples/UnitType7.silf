@@ -1,0 +1,20 @@
+function main(void)
+begin
+  var $m x;
+  var $m y;
+  var $f z;
+  var u;
+  
+  if (x < y) then
+    write x + y; # should be fine
+    write x + z; # should be a type error
+    write x * z; # should be fine
+    return x * x;
+  else
+    write x * y * u; # should be fine
+    write x * u + y * u; # should be fine
+    write x * u + z * u; # should be a type error
+    return z * z; # should be an error, return type is a ptype but will be m^2
+  fi
+
+end

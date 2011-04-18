@@ -1,0 +1,18 @@
+function $int f($int x)
+begin
+  return x + 1;
+end
+
+function $int main(void)
+begin
+  var $int x; var $int y;
+  var $bool b;
+
+  x := 3; y := 4; b := true;
+
+  x := f(x); 
+  x := f(x,y);
+  x := y + b;
+
+  if x then write y; else write b; fi
+end

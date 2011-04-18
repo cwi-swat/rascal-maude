@@ -1,0 +1,13 @@
+function main(void)
+begin
+  var x; var y; var n;
+  assume(UNITS): @unit(x) = $m;
+  assume(UNITS): @unit(y) = $m;
+  for n := 1 to 10
+    invariant(UNITS): @unit(x) = @unit(y);
+  do
+    x := x * x;
+    y := y * y;
+  od
+  write x + y;
+end

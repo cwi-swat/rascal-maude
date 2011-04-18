@@ -1,0 +1,416 @@
+***
+*** Sorts added to the infrastructure -- essentially
+*** parts of the abstract syntax, since these are
+*** not used anywhere in the concrete syntax but are
+*** reduced in the program term.
+***
+fmod STATE-SORTS is
+  including IDENTIFIER .
+  including INT .
+  
+  ***
+  *** Base sorts
+  ***
+  sorts Location Value .
+
+  op next : Location -> Location .
+  op loc :  Nat ->  Location .
+  eq next(loc(N:Nat)) = loc(s_(N:Nat)) .
+
+  op add : Location Nat -> Location .
+  eq add(loc(N:Nat),N':Nat) = loc(N:Nat + N':Nat) .
+
+  sorts Computation ComputationItem .
+  subsort ComputationItem < Computation .
+  op nil : -> Computation .
+  op _->_ : Computation Computation -> Computation [assoc id: nil] .
+  
+  ***
+  *** Tuples and tupling operations
+  ***
+  sorts <Id><Location> <Location><Value> <Id><Computation> .
+  op [_,_] : Location Value -> <Location><Value> .
+  op [_,_] : Id Location -> <Id><Location> .
+  op [_,_] : Id Computation -> <Id><Computation> .
+
+  vars X X'' X' : Id . vars L L' L'' : Location . vars V V' V'' : Value .
+  var LVS : <Location><Value>Set .
+  var ILS : <Id><Location>Set . vars Ll Ll' : LocationList .
+  var I : Int . var Il : IntList . vars Vl Vl' : ValueList .
+  vars Xl Xl' : IdList .
+
+  ***
+  *** Lists with ops
+  ***
+  sorts LocationList ValueList IntList .
+  subsort Location < LocationList .
+  subsort Value < ValueList .
+  subsort Int < IntList .
+
+  op nil : -> LocationList .
+  op _,_ : LocationList LocationList -> LocationList [assoc id: nil] .
+
+  op len : LocationList -> Nat .
+  eq len(L,Ll) = 1 + len(Ll) .
+  eq len((nil).LocationList) = 0 .
+
+  op locs : Location Nat -> LocationList .
+  eq locs(L,s(N:Nat)) = L, locs(next(L),N:Nat) .
+  eq locs(L,0) = nil .
+
+  op nil : -> ValueList .
+  op _,_ : ValueList ValueList -> ValueList [assoc id: nil] .
+  op len : ValueList -> Nat .
+  eq len(V,Vl) = 1 + len(Vl) .
+  eq len((nil).ValueList) = 0 .
+
+  op nil : -> IntList .
+  op _,_ : IntList IntList -> IntList [assoc id: nil] .
+  op len : IntList -> Nat .
+  eq len(I,Il) = 1 + len(Il) .
+  eq len((nil).IntList) = 0 .
+
+  op len : IdList -> Nat .
+  eq len(X,Xl) = 1 + len(Xl) .
+  eq len((nil).IdList) = 0 .
+  
+  ***
+  *** Sets with ops
+  ***
+  sorts <Location><Value>Set <Id><Location>Set <Id><Computation>Set .
+  subsort <Location><Value> < <Location><Value>Set .
+  subsort <Id><Location> < <Id><Location>Set .
+  subsort <Id><Computation> < <Id><Computation>Set .
+    
+  op nil : -> <Location><Value>Set .
+  op __ : <Location><Value>Set <Location><Value>Set -> <Location><Value>Set [assoc comm id: nil] .
+  op _[_<-_] : <Location><Value>Set LocationList ValueList -> <Location><Value>Set .
+  eq (LVS [L,V])[L,Ll <- V',Vl] = (LVS [L,V'])[Ll <- Vl] .
+  eq (LVS [L,V])[L <- V'] = LVS [L,V'] .
+  eq LVS [nil <- nil] = LVS .
+  eq (LVS)[L,Ll <- V,Vl] = (LVS [L,V]) [Ll <- Vl] [owise] .
+  eq LVS [L <- V] = LVS [L,V] [owise] .
+  
+  op nil : -> <Id><Location>Set .
+  op __ : <Id><Location>Set <Id><Location>Set -> <Id><Location>Set [assoc comm id: nil] .
+  op _[_<-_] : <Id><Location>Set IdList LocationList -> <Id><Location>Set .
+  eq (ILS [X,L])[X,Xl <- L',Ll] = (ILS [X,L'])[Xl <- Ll] .
+  eq (ILS [X,L])[X <- L'] = ILS [X,L'] .
+  eq ILS [nil <- nil] = ILS .
+  eq ILS [X,Xl <- L,Ll] = (ILS [X,L]) [Xl <- Ll] [owise] .
+  eq ILS [X <- L] = ILS [X,L] [owise] .
+
+  op nil : -> <Id><Computation>Set .
+  op __ : <Id><Computation>Set <Id><Computation>Set -> <Id><Computation>Set [assoc comm id: nil] .
+
+  ***
+  *** More complex sorts, depending on the above sorts
+  ***
+  sort <<Id><Location>Set><Computation> .
+  op [_,_] : <Id><Location>Set Computation -> <<Id><Location>Set><Computation> .
+  sort <<Id><Location>Set><Computation>List .
+  subsort <<Id><Location>Set><Computation> < <<Id><Location>Set><Computation>List .
+  op nil : -> <<Id><Location>Set><Computation>List .
+  op _,_ : <<Id><Location>Set><Computation>List <<Id><Location>Set><Computation>List -> <<Id><Location>Set><Computation>List [assoc id: nil] .
+
+  sort <<Location><Value>Set>List .
+  sort StackFrame StackFrameList .
+  subsort StackFrame < StackFrameList .
+  op [_,_] : Nat <Location><Value>Set -> StackFrame .
+  op nil : -> StackFrameList .
+  op _,_ : StackFrameList StackFrameList -> StackFrameList [assoc id: nil] .
+endfm
+
+***
+*** The state representation of a SILF program,
+*** including the environment, the memory (store),
+*** the execution context, and some other
+*** book-keeping information.
+***
+fmod SILF-STATE is
+  including STATE-SORTS .
+  
+  sort State .
+  
+  op noState : -> State .
+  op __ : State State -> State [comm assoc id: noState] .
+  
+  ***
+  *** Store
+  ***
+  op store : StackFrameList -> State [format (r! o)] .
+
+  ***
+  *** Next location
+  ***
+  op nextLoc : Location -> State [format (r! o)] .
+
+  ***
+  *** I/O Buffers
+  ***
+  ops in out : IntList -> State [format (r! o)] .
+
+  ***
+  *** Environment (Local and Global)
+  ***
+  op env : <Id><Location>Set -> State [format (r! o)] .
+  op genv : <Id><Location>Set -> State [format (r! o)] .
+
+  ***
+  *** Function environment
+  ***
+  op fenv : <Id><Computation>Set -> State [format (r! o)] .
+
+  ***
+  *** Function stack
+  ***
+  op fstack : <<Id><Location>Set><Computation>List -> State [format (r! o)] .
+
+  ***
+  *** Computation
+  ***    
+  op k : Computation -> State [format (r! o)] .
+endfm
+
+***
+*** Operations that work on the state infrastructure
+*** and are used in the language semantics -- this
+*** helps to consolidate them into one location.
+***
+fmod SILF-HELPING-OPS is
+  including SILF-STATE .
+  including SILF-SYNTAX .
+  
+  op val : ValueList -> ComputationItem .
+  op exp : ExpList -> ComputationItem .
+
+  var E : Exp . var El : ExpList .
+  var V : Value . vars Vl Vl' : ValueList .
+  var K : Computation . vars Cs Cs' : ComputationList .
+  vars X X' : Id . vars Xl Xl' : IdList . vars N N' Nb Nb' : Nat .
+  vars Env Env' : <Id><Location>Set . var Mem : <Location><Value>Set .
+  var L : Location . var Ll : LocationList .
+  vars SFL SFL' : StackFrameList . var SF : StackFrame .
+  vars LVS LVS' : <Location><Value>Set . 
+
+  ***
+  *** So we can maintain parallelism in evaluation, put the
+  *** expression list into a continuation list structure that
+  *** will allow us to collect values in the correct order.
+  ***  
+  sort ComputationList .
+  subsort Computation < ComputationList .
+  
+  op nil : -> ComputationList .
+  op _,_ : ComputationList ComputationList -> ComputationList [assoc id: nil] .
+  op clist : ComputationList -> Computation .
+  op {_|_} : ComputationList ComputationList -> Computation .
+  op kexp : Exp -> Computation .
+
+  ***
+  *** First, if we have an expression list, put it into
+  *** the continuation list  
+  ***
+ ceq k(exp(E,El) -> K) = k(clist(kexp(E),kexp(El)) -> K) if El =/= nil .
+ 
+  ***
+  *** Now, stretch the expression list out to the right,
+  *** turning terms into individual expression continuations
+  *** as we go.
+  *** 
+ ceq clist(Cs,kexp(E,El),Cs') = clist(Cs,kexp(E),kexp(El),Cs') if El =/= nil .
+ 
+  ***
+  *** Collapse any internal value continuations into single continuations
+  *** 
+  eq clist(Cs,val(Vl),val(Vl'),Cs') = clist(Cs,val(Vl,Vl'),Cs') .
+  
+  ***
+  *** If we just have a value list, get rid of the wrapper
+  ***
+  eq clist(val(Vl)) = val(Vl) .  
+  
+  ***
+  *** Finally, take out any expressions and evaluate them -- make
+  *** sure we only do this one at a time, and make sure we do this
+  *** in order (for things like function parameters, for instance,
+  *** we want a left to right evaluation order)
+  ***
+  eq clist(kexp(E),Cs) = exp(E) -> {nil | Cs} .
+  eq clist(val(Vl),kexp(E),Cs) = exp(E) -> {val(Vl) | Cs} .
+  eq val(V) -> {val(Vl) | Cs} = clist(val(Vl,V),Cs) .
+  eq val(V) -> {nil | Cs} = clist(val(V),Cs) .
+ 
+  ***
+  *** In some cases we still need the rule collapsing back lists
+  *** of values.
+  ***
+  eq val(Vl) -> val(Vl') = val(Vl,Vl') . 
+
+  ***
+  *** Some value wrappers
+  ***
+  op int : Int -> Value .
+  op bool : Bool -> Value .
+
+  ***
+  *** If we evaluate an empty exp list, return
+  *** an empty val list
+  ***
+  eq k(exp((nil).ExpList) -> K) = k(val((nil).ValueList) -> K) .
+
+  ***
+  *** Name binding
+  ***
+  op bind : IdList -> ComputationItem .
+ ceq k(val(Vl) -> bind(Xl) -> K) env(Env) store([Nb,LVS], SFL) nextLoc(L) =
+     k(K) env(Env[Xl <- Ll]) store([Nb,LVS[Ll <- Vl]], SFL) nextLoc(add(L,N))
+  if Ll := locs(L,len(Xl)) /\ N := len(Xl) .
+
+ ceq k(bind(Xl) -> K) env(Env) nextLoc(L) =
+     k(K) env(Env[Xl <- Ll]) nextLoc(add(L,N))
+  if Ll := locs(L,len(Xl)) /\ N := len(Xl) .
+
+  ***
+  *** Memory block binding (bind a block to a name,
+  *** for arrays)
+  ***
+  op bindBlock : Id -> ComputationItem .
+  eq k(val(int(N)) -> bindBlock(X) -> K) env(Env) nextLoc(L) =
+     k(K) env(Env[X <- L]) nextLoc(add(L,N)) .
+
+  ***
+  *** Identifier assignment
+  ***
+  op assignTo : Id -> ComputationItem .
+  eq k(val(V) -> assignTo(X) -> K) env(Env [X,L]) =
+     k(val(V) -> assignToLoc(L) -> K) env(Env [X,L]) .
+
+  ***
+  *** Memory location assignment
+  ***
+  op assignToLoc : Location -> ComputationItem .
+  eq k(val(V) -> assignToLoc(loc(N)) -> K) store(SFL) =
+     k(K) store(stackAssign(loc(N),V,SFL)) .
+
+  ***
+  *** Assignment helper
+  ***
+  op stackAssign : Location Value StackFrameList -> StackFrameList .
+ ceq stackAssign(loc(N),V,([Nb,LVS], SFL)) =
+     [Nb, LVS [loc(N) <- V]], SFL
+  if N >= Nb .
+ ceq stackAssign(loc(N),V,([Nb,LVS], SFL, [Nb',LVS'])) =
+     [Nb,LVS], SFL, stackAssign(loc(N),V,[Nb',LVS'])
+  if N < Nb .
+
+  ***
+  *** Array element assignment
+  ***
+  op arrayAssign : Id -> ComputationItem .
+  eq k(val(int(N),V) -> arrayAssign(X) -> K) env(Env [X,L]) =
+     k(val(V) -> assignToLoc(add(L,N)) -> K) env(Env [X,L]) .
+
+  ***
+  *** Value lookup by location. . 
+  ***
+  op lookupLoc : Location -> ComputationItem .
+  eq k(lookupLoc(L) -> K) store(SFL) =
+     k(val(stackLookup(L,SFL)) -> K) store(SFL) .
+
+  ***
+  *** Value lookup by location + offset
+  ***
+  op lookupOffset : Id -> ComputationItem .
+  eq k(val(int(N)) -> lookupOffset(X) -> K) env(Env [X,L]) =
+     k(lookupLoc(add(L,N)) -> K) env(Env [X,L]) .
+
+  ***
+  *** Lookup helper
+  ***
+  op stackLookup : Location StackFrameList -> Value .
+ ceq stackLookup(loc(N),([Nb,LVS], SFL)) =
+     lvsLookup(loc(N),LVS)
+  if N >= Nb .
+ ceq stackLookup(loc(N),([Nb,LVS], SFL, [Nb',LVS'])) =
+     lvsLookup(loc(N),LVS') 
+  if N < Nb .
+ 
+ op lvsLookup : Location <Location><Value>Set -> Value .
+ eq lvsLookup(L,([L,V] LVS)) = V .
+ 
+  ***
+  *** Value discard
+  ***
+  op discard : -> ComputationItem .
+  eq k(val(Vl) -> discard -> K) = k(K) .
+  eq k(discard -> K) = k(K) . *** just in case we accidentally add an extra discard
+
+  ***
+  *** Syntax wrappers
+  ***
+  op stmt : StmtList -> ComputationItem .
+  op exp : ExpList -> ComputationItem .
+  op fdecl : FunDeclSet -> ComputationItem .
+  op pgm : Pgm -> ComputationItem .
+  op decl : DeclList -> ComputationItem .
+  
+  ***
+  *** Save the environment for later restoration. If we find this item with
+  *** a value on top, pass the value around it, this would be the return
+  *** value from a function.
+  ***
+  op restoreEnv : <Id><Location>Set -> ComputationItem .
+  eq k(restoreEnv(Env) -> K) env(Env') = k(K) env(Env) .
+  eq k(val(Vl) -> restoreEnv(Env) -> K) = k(restoreEnv(Env) -> val(Vl) -> K) .
+  
+  ***
+  *** Strip type annotations off typed identifiers, yielding
+  *** standard identifiers
+  ***
+  var TA : TypeAnn . var TIL : TypedIdList . var PV : PolicyVal .
+  op stripTypes : TypedIdList -> IdList .
+  eq stripTypes( (TA X), TIL) = X, stripTypes(TIL) .
+  eq stripTypes( (PV X), TIL) = X, stripTypes(TIL) .
+  eq stripTypes(nil) = nil .
+  
+  op stripType : TypedId -> Id .
+  eq stripType(TA X) = X .
+  eq stripType(PV X) = X .
+  
+  ***
+  *** Return the list of type annotations associated with
+  *** a list of typed identifiers, maintaining order.
+  ***
+  op getTypeAnnList : TypedIdList -> TypeAnnList .
+  eq getTypeAnnList( (TA X), TIL) = TA, getTypeAnnList(TIL) .
+  eq getTypeAnnList(nil) = nil .
+  
+  op getTypeAnn : TypedId -> TypeAnn .
+  eq getTypeAnn(TA X) = TA .
+  
+  ***
+  *** Hooks to wrap/unwrap policy values; this allows this logic 
+  *** to remain generic.
+  ***
+  op policyVal2Val : PolicyVal -> Value .
+  op val2PolicyVal : Value -> PolicyVal .  
+
+  ***
+  *** Pop the most recent layer off the store stack; if we
+  *** have a value on top of this (say from a function return),
+  *** pass it around the computation item
+  ***
+  op popStore : -> ComputationItem .
+  eq k(popStore -> K) store(SF, SFL) =
+     k(K) store(SFL) .  
+  eq k(val(Vl) -> popStore -> K) = k(popStore -> val(Vl) -> K) .
+     
+  ***
+  *** Push a new empty layer onto the stack
+  ***
+  op pushStore : -> ComputationItem .
+  eq k(pushStore -> K) store(SFL) nextLoc(loc(N)) =
+     k(K) store([N,nil], SFL) nextLoc(loc(N)) .
+endfm
+

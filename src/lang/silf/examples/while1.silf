@@ -1,0 +1,16 @@
+function main(void)
+begin
+  var x;
+  var y;
+  x := 0;
+  y := 0;
+
+  while (x < 10)
+    invariant(ALL): x = y;
+  do
+    x := x + 1;
+    y := y + 1;
+    write x;
+    write y;
+  od
+end

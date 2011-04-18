@@ -1,0 +1,11 @@
+function $U test($U x)
+begin
+  return x;
+end
+
+function test2(void)
+begin
+  var $m x;
+  var $m y;
+  y := test(x); 
+end

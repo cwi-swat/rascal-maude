@@ -1,0 +1,18 @@
+function $bool factorial($int n)
+begin
+  if n = 0 then
+    return false;
+  else
+    return n * factorial(n - 1);
+  fi
+end
+
+function main(void)
+begin
+  var $int x; 
+  x := read;
+  while (x > 0) do
+    write factorial(x);
+    x := read;
+  od
+end

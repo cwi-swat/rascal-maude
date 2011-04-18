@@ -1,0 +1,562 @@
+in SILF-syntax .
+in SILF-state .
+in SILF-policies .
+in SILF-units .
+in SILF-general-semantics .
+
+fmod UNITTYPES-DECL-SEMANTICS is
+  including STATE .
+  including GENERIC-DECL-SEMANTICS .
+  
+  var X : Id . 
+  var N : Int . 
+  var K : Computation .
+  vars PV PV' : Unit .
+
+  ***
+  *** First case: a standard variable declaration with a type annotation 
+  *** PV =/= noType. pv2pv will strip out annotations from other systems, 
+  *** saving unit-only annotations in PV. This unit value will be bound to 
+  *** X, with the other semantic rules then preventing changes.
+  ***
+ ceq k(decl(var (PV X)) -> K) = 
+     k(val(u(PV')) -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+  ***
+  *** Second and third cases; either we have an annotation, but it isn't a unit 
+  *** annotation, or we have no annotations. We assign a "fresh" unit in these
+  *** cases.
+  ***
+ ceq k(decl(var (PV X)) -> K) = 
+     k(issueWarning(3,"No unit type given for variable " + pretty-print(X) + ", assigning fresh unit.") -> genFreshUnit -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+  
+ ceq k(decl(var (PV X)) -> K) = 
+     k(issueWarning(3,"No unit type given for variable " + pretty-print(X) + ", assigning fresh unit.") -> genFreshUnit -> bind(X) -> K)
+  if PV == noType .
+
+  ***
+  *** These rules are the same as the standard var rules, since each array can
+  *** only contain values of one unit.
+  ***
+ ceq k(decl(var (PV X)[#(N)]) -> K) = 
+     k(val(u(PV')) -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+  
+ ceq k(decl(var (PV X)[#(N)]) -> K) = 
+     k(issueWarning(3,"No unit type given for array variable " + pretty-print(X) + ", assigning fresh unit.") -> genFreshUnit -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+  
+ ceq k(decl(var (PV X)[#(N)]) -> K) = 
+     k(issueWarning(3,"No unit type given for array variable " + pretty-print(X) + ", assigning fresh unit.") -> genFreshUnit -> bind(X) -> K)
+  if PV == noType .  
+endfm
+
+***
+*** SILF Semantics: Lookups/Simple Expressions
+***
+fmod UNITTYPES-LOOKUP-SEMANTICS is
+  including STATE .
+  including GENERIC-LOOKUP-SEMANTICS .
+  
+  var U : Unit .
+  var V : Value .
+  var K : Computation .
+
+  eq defaultIntVal = u($cons) .
+  
+  eq defaultBoolVal = u($noUnit) .
+
+  eq k(val(u(U),V) -> extractArrayVal -> K) = k(val(u(U)) -> K) .
+  
+  ***
+  *** Provide a concrete value for noval, here we just assume it is
+  *** 
+  ***
+  eq noVal = genFreshUnit .
+  
+endfm
+
+***
+*** SILF Semantics: Arithmetic operations
+***
+fmod UNITTYPES-ARITH-SEMANTICS is
+  including STATE .
+  including GENERIC-ARITH-SEMANTICS .
+  
+  vars E E' : Exp . 
+  vars U U' : Unit . 
+  var K : Computation .
+
+ ceq k(val(u(U),u(U')) -> +(E) -> K) = k(val(u(mergeUnits(U,U'))) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> +(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to add incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> -(E) -> K) = k(val(u(mergeUnits(U,U'))) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> -(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to subtract incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+  eq k(val(u(U),u(U')) -> *(E) -> K) = k(val(u(U U')) -> K) .
+
+  eq k(val(u(U),u(U')) -> /(E) -> K) = k(val(u(U (U' ^ -1))) -> K) .
+
+  eq k(val(u(U),u(U')) -> %(E) -> K) = k(val(u(U (U' ^ -1))) -> K) .
+
+  eq k(val(u(U)) -> u-(E) -> K) = k(val(u(U)) -> K) .
+endfm
+
+***
+*** SILF Semantics: Relational operations
+***
+fmod UNITTYPES-RELATIONAL-SEMANTICS is
+  including STATE .
+  including GENERIC-RELATIONAL-SEMANTICS .
+
+  vars E E' : Exp . 
+  vars U U' : Unit . 
+  var K : Computation .
+
+  ***
+  *** All the relational operations work in a similar way, with two
+  *** cases. To compare two values, they must have compatible units.
+  *** In the first case, they do, while in the second, they do not,
+  *** resulting in an error message. In the first case, $noUnit is
+  *** returned, since the result of the comparison is no longer a
+  *** number, but a true/false value. In the second case, $fail is
+  *** returned to represent the unit failure.
+  ***
+  
+ ceq k(val(u(U),u(U')) -> lt(E) -> K) = k(val(u($noUnit)) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> lt(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to compare incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> lte(E) -> K) = k(val(u($noUnit)) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> lte(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to compare incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> gt(E) -> K) = k(val(u($noUnit)) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> gt(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to compare incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> gte(E) -> K) = k(val(u($noUnit)) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> gte(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to compare incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> eq(E) -> K) = k(val(u($noUnit)) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> eq(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to compare incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> neq(E) -> K) = k(val(u($noUnit)) -> K)
+  if compatible(U,U') .
+
+ ceq k(val(u(U),u(U')) -> neq(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, attempting to compare incompatible units: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if not compatible(U,U') .
+
+endfm
+
+***
+*** SILF Semantics: Logical operations
+***
+fmod UNITTYPES-LOGICAL-SEMANTICS is
+  including STATE .
+  including GENERIC-LOGICAL-SEMANTICS .
+
+  vars E E' : Exp . 
+  vars U U' : Unit . 
+  var K : Computation .
+
+  ***
+  *** The constructs and, or, not take boolean values, which
+  *** should not have associated units. If the values we are
+  *** using do have units, issue an error -- it doesn't make
+  *** sense to logically and $meter and $second, for instance.
+  ***
+  eq k(val(u($noUnit),u($noUnit)) -> and(E) -> K) = k(val(u($noUnit)) -> K) .
+ ceq k(val(u(U),u(U')) -> and(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, cannot use units in logical operations: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if U =/= $noUnit or U' =/= $noUnit .
+  
+  eq k(val(u($noUnit),u($noUnit)) -> or(E) -> K) = k(val(u($noUnit)) -> K) .
+ ceq k(val(u(U),u(U')) -> or(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, cannot use units in logical operations: " + pretty-print(E) + "," + pretty-print(U) + "," + pretty-print(U')) -> val(u($fail)) -> K)
+  if U =/= $noUnit or U' =/= $noUnit .
+  
+  eq k(val(u($noUnit)) -> not(E) -> K) = k(val(u($noUnit)) -> K) .
+ ceq k(val(u(U),u(U')) -> not(E) -> K) = 
+     k(issueWarning(1,"Unit type failure, cannot use units in logical operations: " + pretty-print(E) + "," + pretty-print(U)) -> val(u($fail)) -> K)
+  if U =/= $noUnit .
+endfm
+
+***
+*** SILF Semantics: Assignment
+***
+fmod UNITTYPES-ASSIGNMENT-SEMANTICS is 
+  including STATE .
+  including GENERIC-ASSIGNMENT-SEMANTICS .
+
+  var X : Id . 
+  vars E E' : Exp . 
+  var K : Computation .
+  vars U U' U'' : Unit .
+  
+  ***
+  *** We can always assign E to X if they have the same units or
+  *** if the unit for E is $cons, which occurs when we have an
+  *** assignment like x := 5
+  ***  
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) = k(K)
+  if U == U' or U' == $cons .
+
+  ***
+  *** If U and U' differ, and U' is not $cons, this is considered
+  *** to be an assignment error.
+  ***  
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) =
+     k(issueWarning(1,"Unit type failure, invalid assignment: identifier " + pretty-print(X) + " has unit type " + pretty-print(U) + 
+                      " and expression " + pretty-print(E) + " has unit type " + pretty-print(U') + ".") -> K)
+  if U =/= U' and U' =/= $cons .
+
+  ***
+  *** For arrays, the assignment rules are the same, with the additional
+  *** proviso that the indexing expression should either be $noUnit or
+  *** $cons -- i.e., it doesn't make sense to look "5 feet" into an array.
+  ***
+  eq k(val(u(U),u($noUnit),u(U)) -> checkArrayAssign(X,E,E') -> K) = k(K) .
+  eq k(val(u(U),u($cons),u(U)) -> checkArrayAssign(X,E,E') -> K) = k(K) .
+  eq k(val(u(U),u($noUnit),u($cons)) -> checkArrayAssign(X,E,E') -> K) = k(K) .
+  eq k(val(u(U),u($cons),u($cons)) -> checkArrayAssign(X,E,E') -> K) = k(K) .
+  
+ ceq k(val(u(U),u(U'),u(U'')) -> checkArrayAssign(X,E,E') -> K) =
+     k(issueWarning(1,"Unit type failure, index expression " + pretty-print(E) + " has unit type " + pretty-print(U') + ", not $cons or $noUnit.") -> K)
+  if U' =/= $cons and U' =/= $noUnit .
+    
+ ceq k(val(u(U),u(U'),u(U'')) -> checkArrayAssign(X,E,E') -> K) =
+     k(issueWarning(1,"Unit failure, attempt to assign expression " + pretty-print(E') + " with unit type " + pretty-print(U'') + " to array " + 
+                      pretty-print(X) + " of unit type " + pretty-print(U) + ".") -> K)
+  if (U' == $cons or U' == $noUnit) and (U =/= U'' and U'' =/= $cons) .
+endfm
+
+***
+*** SILF Semantics: Conditionals
+***
+fmod UNITTYPES-CONDITIONAL-SEMANTICS is
+  including STATE .
+  including GENERIC-CONDITIONAL-SEMANTICS .
+
+  vars K Kt Kf : Computation .
+  var E : Exp .
+  var V : Value .
+  
+  eq k(val(V) -> checkIfGuard -> if(E,Kt,Kf) -> K) = k(Kt -> Kf -> K) .
+endfm
+
+***
+*** SILF Semantics: Loops
+***
+fmod UNITTYPES-LOOP-SEMANTICS is
+  including STATE .
+  including GENERIC-LOOP-SEMANTICS .
+
+  vars E E' : Exp . 
+  vars K Ke Ks Kf : Computation .
+  var X : Id . 
+  vars U U' U'' : Unit .
+  var V : Value .
+
+  ***
+  *** Given that the loop variable has unit U, the from and to expressions
+  *** must either also have unit U or be of unit $cons; other combinations
+  *** are errors.
+  ***
+  eq k(val(u(U),u(U),u(U)) -> for(X,E,E',Kf) -> K) = k(Kf) .
+  eq k(val(u(U),u(U),u($cons)) -> for (X,E,E',Kf) -> K) = k(Kf) .
+  eq k(val(u(U),u($cons),u(U)) -> for (X,E,E',Kf) -> K) = k(Kf) .
+  eq k(val(u(U),u($cons),u($cons)) -> for (X,E,E',Kf) -> K) = k(Kf) .
+  
+  ***
+  *** These are the error conditions, which are triggered when the above doesn't hold.
+  ***
+ ceq k(val(u(U),u(U'),u(U'')) -> for(X,E,E',Kf) -> K) =
+     k(issueWarning(1,"Unit type failure, for identifier " + pretty-print(X) + " has unit type " + pretty-print(U) + 
+                      " but from expression has unit type " + pretty-print(U') + ".") -> Kf -> K)
+  if U =/= U' and U' =/= $cons .
+
+ ceq k(val(u(U),u(U),u(U'')) -> for(X,E,E',Kf) -> K) =
+     k(issueWarning(1,"Unit type failure, for identifier " + pretty-print(X) + " has unit type " + pretty-print(U) + 
+                      " but to expression has unit type " + pretty-print(U'') + ".") -> Kf -> K)
+  if U =/= U'' and U'' =/= $cons .
+
+  ***
+  *** For while loops, we evaluate the guard and then the body. The guard's unit doesn't effect
+  *** anything (since we don't assign it to anything), so we can just discard it before checking
+  *** the while body. Since we don't need the expression or the body for other than checks,
+  *** we just "stretch" everything out in one equations. We ignore invariants, since
+  *** they don't impact type checking.
+  ***    
+  eq k(val(V) -> while(E,Ks) -> K) = k(Ks -> K) .
+endfm
+
+***
+*** SILF Semantics: I/O. For units, read just returns a number, which
+*** will have unit $cons, while write can write an expression
+*** with any unit, i.e., we don't care if we write $meter, $kg, etc.
+***
+fmod UNITTYPES-IO-SEMANTICS is
+  including STATE .
+  including GENERIC-IO-SEMANTICS .
+
+  var E : Exp . 
+  var K : Computation .
+  var V : Value .
+
+  eq readVal = u($cons) .
+  
+  eq k(val(V) -> write(E) -> K) = k(K) .
+endfm
+
+***
+*** SILF Semantics: Functions
+***
+fmod UNITTYPES-FUNCTION-SEMANTICS is
+  including STATE .
+  including GENERIC-FUNCTION-SEMANTICS * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+
+  vars X X' : Id . 
+  vars K K' : Computation .
+  vars Vl Vl' : ValueList .
+  var TX : TypedId .
+  var TXs : TypedIdList . 
+  vars U U' U'' : Unit . 
+  vars PV PV' : Unit .
+  var N : Nat .
+
+  ***
+  *** For units, if a return type is given we use that. If one is NOT given,
+  *** we still need to ensure that the SAME unit is returned by each return
+  *** statement in the function, or we could have different units returned
+  *** along different branches of a program. To do this, we use a "polytype",
+  *** or a polymorphic type, which will be instantiated to the first unit
+  *** it is used with. This gives us a very rough form of unit type inference.
+  *** Note that here we just issue the advisory; the code to generate the
+  *** polytype is given below.
+  ***
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(issueWarning(4,"No unit type given for return type for function " + pretty-print(X) + ", assuming fresh unit.") -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(issueWarning(4,"No unit type given for return type for function " + pretty-print(X) + ", assuming fresh unit.") -> K)
+  if PV == noType .
+       
+  ***
+  *** Used to check the formal parameter signature for proper typing when
+  *** the function itself is being checked. This will bind the proper types
+  *** to each formal parameter. If a type is given, we use that; if no type
+  *** is given, we instead create a fresh unit for each parameter, which is
+  *** just a globally unique unit that is incompatible with all other units.
+  ***
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(checkSigTypes( TXs ) -> val(u(PV')) -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(issueWarning(3,"No unit type given for formal parameter " + pretty-print(X) + ", assigning fresh unit.") -> checkSigTypes( TXs ) -> genFreshUnit -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(issueWarning(3,"No unit type given for formal parameter " + pretty-print(X) + ", assigning fresh unit.") -> checkSigTypes( TXs ) -> genFreshUnit -> bind(X) -> K)
+  if PV == noType .
+
+  ***
+  *** Get the return type; this implements the "polytype" logic described
+  *** above with checkRetType. Note that we don't issue an advisory here,
+  *** since we already did that above.
+  ***
+ ceq k(getRetType( (PV X) ) -> K)= k(val(u(PV')) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(genPolyType -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(genPolyType -> K)
+  if PV == noType .
+  
+  ***
+  *** The logic for extractTypesAux is similar to that used in checkSigTypes; here,
+  *** we want to find the proper type for each typed identifier. Note that we do
+  *** not issue any advisories here; those will have already been issued when
+  *** the function being called was checked, making additional messages redundant.
+  *** The value list at the front gives us a place to build up the results we
+  *** need.
+  ***
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(val(u(PV'),Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(genFreshUnit -> val(Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(genFreshUnit -> val(Vl) -> extractTypesAux( TXs ) -> K)
+  if PV == noType .
+  
+  ***
+  *** Check the provided types against a list of types, reporting any differences
+  *** as type errors. This also checks to make sure the correct number of parameters
+  *** is provided. Note that the first typed identifier in the list given to
+  *** check contains the name of the function.
+  ***
+  eq k((compare (u(U), Vl) to (u(U), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k((compare Vl to Vl' in ((PV X), TXs)) -> K) .
+     
+  eq k((compare (u($cons), Vl) to (u(U), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k((compare Vl to Vl' in ((PV X), TXs)) -> K) .
+
+ ceq k((compare (u(U), Vl) to (u(U'), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k(issueWarning(1,"Unit type failure: function " + pretty-print(X) + ", actual and formal function parameter " + pretty-print(X') + " unit types differ, " + 
+                      pretty-print(U) + "," + pretty-print(U') + ".") -> (compare Vl to Vl' in ((PV X), TXs)) -> K)
+  if U =/= U' and U =/= $cons .
+
+  eq k((compare (u(U), Vl) to nil in (PV X)) -> K) =
+     k(issueWarning(1,"Type failure: too many arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((compare nil to (u(U'), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k(issueWarning(1,"Type failure: not enough arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((compare nil to nil in (PV X)) -> K) = k(K) .
+                        
+  ***
+  *** Get the return type for a call; while a polytype will be assigned
+  *** in the function body, this will just return a fresh type if the
+  *** type is not known, since we can assume that only one unit type
+  *** can be returned from the function.
+  ***
+ ceq k(getRetTypeForCall( (PV X) ) -> K)= k(val(u(PV')) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetTypeForCall( (PV X) ) -> K) = k(genFreshUnit -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetTypeForCall( (PV X) ) -> K) = k(genFreshUnit -> K)
+  if PV == noType .
+  
+  ***
+  *** Function return; if we return from a function, we actually just keep going in the
+  *** current function after checking to ensure the return is correct. This is because
+  *** this is a static execution, and we want to cover even code that is technically
+  *** dead code to ensure it is free of type errors. If the type of return is a polytype,
+  *** we also "fix" the type here, so other returns have to return the same type.
+  *** instantiatePType will take care of altering any other storage locations that use
+  *** this ptype, while dropRetType and saveRetType are used to drop the current
+  *** return type in the state and put in the new one.
+  ***
+  eq k(val(u(U)) -> return(u(U)) -> K) = k(K) .
+  eq k(val(u($cons)) -> return(u(U)) -> K) = k(K) .
+  
+ ceq k(val(u(U)) -> return(u(ptype(N))) -> K) = 
+     k(instantiatePType(N,U) -> updateRetType -> K) 
+  if U =/= $cons .
+  
+ ceq k(val(u(U)) -> return(u(U')) -> K) = 
+     k(issueWarning(1,"Unit type error: return expected unit type " + pretty-print(U') + " but return expression evaluates to unit type " + pretty-print(U) + ".") -> K) 
+  if U =/= U' and U =/= $cons and isPType(U') == false .
+endfm
+
+***
+*** Annotation statement semantics. We don't use any but cast
+*** in this unit types semantics. For cast, we only do something
+*** if the type annotation is one recognized by units.
+***
+fmod UNITTYPES-ANNOTATION-SEMANTICS is
+  including STATE .
+  including GENERIC-ANNOTATION-SEMANTICS .
+  
+  var PE : UnitExp .
+  var K : Computation .
+  var X : Id .
+  
+  eq k(stmt(assume(X,PE)) -> K) = k(K) .
+  eq k(stmt(assert(X,PE)) -> K) = k(K) .
+  
+endfm
+
+fmod UNITTYPES-CAST-SEMANTICS is
+  including STATE .
+  including GENERIC-CAST-SEMANTICS .
+  
+  var K : Computation .
+  vars PV PV' : Unit .
+  var E : Exp .
+    
+  ***
+  *** Here, we are casting to a different unit; issue an advisory just
+  *** in case...
+  ***
+ ceq k(exp(cast E to (PV)) -> K) = 
+     k(issueWarning(4,"Performing arbitrary cast on expression " + pretty-print(E) + " to unit " + pretty-print(PV') + ".") -> exp(E) -> discard -> val(u(PV')) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+    
+  ***
+  *** These two cases are where the cast is in another annotation system, so
+  *** we ignore it. We still want to evaluate E, though, to find unit errors.
+  ***
+ ceq k(exp(cast E to (PV)) -> K) = k(exp(E) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(exp(cast E to (PV)) -> K) = k(exp(E) -> K)
+  if PV == noType .
+endfm
+
+fmod UNITTYPES-SILF-SEMANTICS is
+  including UNITTYPES-DECL-SEMANTICS .
+  including UNITTYPES-LOOKUP-SEMANTICS .
+  including UNITTYPES-ARITH-SEMANTICS .
+  including UNITTYPES-RELATIONAL-SEMANTICS .
+  including UNITTYPES-LOGICAL-SEMANTICS .
+  including UNITTYPES-ASSIGNMENT-SEMANTICS .
+  including UNITTYPES-CONDITIONAL-SEMANTICS .
+  including UNITTYPES-LOOP-SEMANTICS .
+  including UNITTYPES-IO-SEMANTICS .
+  including GENERIC-COMP-SEMANTICS .
+  including UNITTYPES-FUNCTION-SEMANTICS .
+  including GENERIC-PROGRAM-SEMANTICS .
+  including UNITTYPES-ANNOTATION-SEMANTICS .
+  including UNITTYPES-CAST-SEMANTICS .
+  including GENERIC-SILF-SEMANTICS .
+  including UNITS-LONG-FORM .
+
+  var P : Pgm .
+  var Nl : IntList .
+    
+  eq successMsg = "Unit type checking successful." .
+  eq failMsg = "Unit type checking found errors:" .  
+  
+  eq startingState(P,Nl) = k(pgm(P)) env(nil) genv(nil) fenv(nil) ftenv(nil) store([0,nil]) 
+                             nextLoc(loc(0)) log(noOutput) currLoc(sl("nowhere",0,0,0,0,0,0)) c(0) ptcount(0) .
+  
+endfm
+

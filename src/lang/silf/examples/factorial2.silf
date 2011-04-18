@@ -1,0 +1,17 @@
+function factorial(n)
+begin
+  if n = 0 then
+    return 1;
+  else
+    return n * factorial(n - 1);
+  fi
+end
+
+function main(void)
+begin
+  var x; var y;
+  y := read; 
+  for x := 1 to y do
+    write factorial(x);
+  od
+end

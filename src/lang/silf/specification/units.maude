@@ -1,0 +1,510 @@
+***
+*** The theory of units. These may be organized more stringently
+*** later (into hierarchies based on dimension, such as length), but
+*** for now all are "flat" (units are syntactically distinct).
+***
+fmod UNITS is 
+  protecting RAT .
+  protecting FLOAT .
+  protecting CONVERSION .
+  protecting QID .
+  including TYPE-ANNOTATION * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+
+  ***
+  *** The basic sort for units. Also included are constructors
+  *** for basic units representing unitless values, etc, as well
+  *** as constructors for forming powers and products.
+  ***  
+  sorts BaseUnit .
+  subsort BaseUnit < Unit .
+  ops $noUnit $nounit $fail $cons : -> BaseUnit .
+  op _^_ : BaseUnit Rat -> BaseUnit [prec 10] .
+  op _^_ : BaseUnit Float -> BaseUnit [prec 10] .
+  op __ : BaseUnit BaseUnit -> BaseUnit [assoc comm prec 15] .
+  op _^_ : Unit Rat -> Unit [ditto] .
+  op _^_ : Unit Float -> Unit [ditto] .
+  op __ : Unit Unit -> Unit [ditto] .
+  eq $nounit = $noUnit .
+
+  ***
+  *** Wrappers for fresh units
+  ***
+  op NUnit : Nat -> BaseUnit .
+
+  op isFreshUnit : Unit -> Bool .
+  eq isFreshUnit(NUnit(NU:Nat)) = true .
+  eq isFreshUnit(U) = false [owise] .
+      
+  ***
+  *** Just to make things simpler, make type variables units
+  ***
+  subsort TypeVar < Unit .
+    
+  ***
+  *** Unit simplification equations.
+  ***  
+  vars U U' : Unit .  vars N M : Rat . vars F F' : Float .
+  
+  ***
+  *** First, for "special" units
+  ***  
+  eq U $noUnit = U .
+  eq U $fail = $fail .
+  eq U $cons = U .
+  
+  eq $fail ^ N = $fail .
+  eq $noUnit ^ N = $noUnit .
+  eq $cons ^ N = $cons .
+  
+  eq $fail ^ F = $fail .
+  eq $noUnit ^ F = $noUnit .
+  eq $cons ^ F = $cons .
+  
+  ***
+  *** Now, simplification for all units.
+  ***  
+  eq U ^ 0 = $noUnit .
+  eq U ^ 0.0 = $noUnit .
+  eq U ^ 1 = U .
+  eq U ^ 1.0 = U .
+  eq U U = U ^ 2 .
+  eq U (U ^ N) = U ^ (N + 1) .
+  eq U (U ^ F) = U ^ (F + 1.0) .
+  eq (U ^ N) (U ^ M) = U ^ (N + M) .
+  eq (U ^ F) (U ^ F') = U ^ (F + F') .
+  eq (U ^ N) (U ^ F) = U ^ (float(N) + F) .
+  eq (U U') ^ N = (U ^ N) (U' ^ N) .
+  eq (U U') ^ F = (U ^ F) (U' ^ F) .
+  eq (U ^ N) ^ M = U ^ (N * M) .
+  eq (U ^ F) ^ F' = U ^ (F * F') .
+  eq (U ^ N) ^ F = U ^ (float(N) * F) .
+  eq (U ^ F) ^ M = U ^ (F * float(M)) .
+
+  ***
+  *** Check for compatible units. The $cons unit is 
+  *** compatible with any other unit, $fail is incompatible with
+  *** all units, and otherwise the units much match to be compatible.
+  ***  
+  op compatible : Unit Unit -> Bool .
+  eq compatible(U, U') =
+     (U =/= $fail and U == U' or
+      U =/= $fail and U' == $cons or
+      U' =/= $fail and U == $cons) .
+      
+  ***
+  *** Determine if the unit represents an actual unit, or a special
+  *** unitless "placeholder" unit.
+  ***      
+  op isNoUnit : Unit -> Bool .
+  eq isNoUnit(U) = 
+     (U == $noUnit or U == $cons) .
+     
+  ***
+  *** Merge units in cases where one unit should take precedence.
+  *** For instance, if x has unit meter, then x + 5 should also have
+  *** unit meter, so mergeUnits(meter,cons) will be meter.
+  ***
+  op mergeUnits : Unit Unit -> Unit .
+
+  eq mergeUnits ($cons,U) = U .
+  eq mergeUnits (U,$cons) = U .
+  eq mergeUnits ($fail,U) = $fail .
+  eq mergeUnits (U,$fail) = $fail .
+  eq mergeUnits (U,U) = U .
+ ceq mergeUnits (U,U') = $fail if U =/= U' .
+endfm
+
+***
+***
+*** Some basic, predefined units and unit expressions.
+*** The SI units are based on http://physics.nist.gov/cuu/Units/units.html.
+***
+fmod BASIC-UNITS is 
+  protecting UNITS .
+  
+  *** Length.
+  ops $meter $m : -> BaseUnit .
+  
+  *** Mass.
+  ops $kilogram $kg : -> BaseUnit .
+  
+  *** Time.
+  ops $second $s : -> BaseUnit .
+  
+  *** Electric current.
+  ops $ampere $A : -> BaseUnit .
+  
+  *** Thermodynamic temperature.
+  ops $kelvin $K : -> BaseUnit .
+  
+  *** Amount of substance.
+  ops $mole $mol : -> BaseUnit .
+  
+  *** Luminous intensity.
+  ops $candela $cd : -> BaseUnit .    
+  
+endfm
+
+***
+*** Some common additional and derived units. Note that we don't consider feet to be
+*** derived from meters, for instance, since we don't include conversion factors. 
+*** Obviously more derived units can be added if desired.
+***
+fmod DERIVED-UNITS is
+  including BASIC-UNITS .
+  
+  *** Additional units of length
+  ops $foot $feet $f $mile $kilometer $km $cm $centimeter : -> BaseUnit .
+  
+  *** Additional units of mass
+  ops $pound $lb : -> BaseUnit .
+
+  *** Additional units of thermodynamic temperature.
+  ops $Celsius $degC $Fahrenheit $degF : -> BaseUnit .
+  
+  *** Units of plane and solid angles; these are derived, but would translate
+  *** to noUnit, so we keep them separate
+  ops $radian $rad $degree $deg $steradian $sr : -> BaseUnit .
+  
+  *** Frequency
+  ops $hertz $Hz : -> BaseUnit .
+  eq $hertz = $s ^ -1 .
+  
+  *** Force
+  ops $newton $N : -> BaseUnit .
+  eq $newton = $m $kg $s ^ -2  .
+  
+  *** Pressure, stress
+  ops $pascal $Pa : -> BaseUnit .
+  eq $pascal = $m ^ -1 $kg $s ^ -2 .
+  
+  *** Energy, work, quantity of heat
+  ops $joule $J : -> BaseUnit .
+  eq $joule = $m ^ 2 $kg $s ^ -2 .
+  
+  *** Power, radiant flux
+  ops $watt $W : -> BaseUnit .
+  eq $watt = $m ^ 2 $kg $s ^ -3 .
+  
+  *** Electric charge, quantity of electricity
+  ops $coulomb $C : -> BaseUnit .
+  eq $coulomb = $s $A .
+  
+  *** Electric potential difference, electromotive force
+  ops $volt $V : -> BaseUnit .
+  eq $volt = $m ^ 2 $kg $s ^ -3 $A ^ -1 .
+  
+  *** Capacitance
+  ops $farad $F : -> BaseUnit .
+  eq $farad = $m ^ -2 $kg ^ -1 $s ^ 4 $A ^ 2 .
+  
+  *** Electric resistance (shorthand is \Omega, which we cannot use)
+  ops $ohm : -> BaseUnit .
+  eq $ohm = $m ^ 2 $kg $s ^ -3 $A ^ 2 .
+  
+  *** Electric conductance
+  ops $siemens $S : -> BaseUnit .
+  eq $siemens = $m ^ -2 $kg ^ -1 $s ^ 3 $A ^ 2 .
+  
+  *** Magnetic flux
+  ops $weber $Wb : -> BaseUnit .
+  eq $weber = $m ^ 2 $kg $s ^ -2 $A ^ -1 .
+  
+  *** Magnetic flux density
+  ops $tesla $T : -> BaseUnit .
+  eq $tesla = $kg $s ^ -2 $A ^ -1 .
+  
+  *** Inductance
+  ops $henry $H : -> BaseUnit .
+  eq $henry = $m ^ 2 $kg $s ^ -2 $A ^ -2 .
+  
+  *** Luminous flux
+  ops $lumen $lm : -> BaseUnit .
+  eq $lumen = $cd .
+  
+  *** Illuminance
+  ops $lux $lx : -> BaseUnit .
+  eq $lux = $m ^ -2 $cd .
+  
+  *** Activity (of a radionuclide)
+  ops $becquerel $Bq : -> BaseUnit .
+  eq $becquerel = $s ^ -1 .
+  
+  *** Absorbed dose, specific energy (imparted), kerma
+  ops $gray $Gy : -> BaseUnit .
+  eq $gray = $m ^ 2 $s ^ -2 .
+  
+  *** Dose equivalent
+  ops $sievert $Sv : -> BaseUnit .
+  eq $sievert = $m ^ 2 $s ^ -2 .
+  
+  *** Catalytic activity
+  ops $katal $kat : -> BaseUnit .
+  eq $katal = $s ^ -1 $mol .
+      
+endfm
+
+***
+*** Some simple equations that will keep unit names in short
+*** form (m, not meter). Note that either this module or the
+*** next should be included, but NOT BOTH!
+***
+fmod UNITS-SHORT-FORM is 
+  protecting BASIC-UNITS .
+  protecting DERIVED-UNITS .
+    
+  ***
+  *** For basic units
+  ***    
+  eq $meter = $m .
+  eq $kilogram = $kg .
+  eq $second = $s .
+  eq $ampere = $A .
+  eq $kelvin = $K .
+  eq $mole =  $mol .
+  eq $candela = $cd .
+  
+  ***
+  *** For provided derived units
+  ***    
+  eq $foot = $f .
+  eq $feet = $f .
+  eq $kilometer = $km .
+  eq $centimeter = $cm .
+  eq $pound = $lb .  
+  eq $Fahrenheit  = $degF .
+  eq $Celsius = $degC .
+  eq $radian = $rad .
+  eq $degree = $deg .
+  eq $steradian = $sr .
+  eq $hertz = $Hz .
+  eq $newton = $N .
+  eq $pascal = $Pa .
+  eq $joule = $J .
+  eq $watt = $W .
+  eq $coulomb = $C .
+  eq $volt = $V .
+  eq $farad = $F .
+  eq $siemens = $S .
+  eq $weber = $Wb .
+  eq $tesla = $T .
+  eq $henry = $H .
+  eq $lumen = $lm .
+  eq $lux = $lx .
+  eq $becquerel = $Bq .
+  eq $gray = $Gy .
+  eq $sievert = $Sv .
+  eq $katal = $kat .
+endfm
+
+***
+*** Some simple equations that will keep unit names in long
+*** form (meter, not m). Note that either this module or the
+*** prior module should be included, but NOT BOTH!
+***
+fmod UNITS-LONG-FORM is 
+  protecting BASIC-UNITS .
+  protecting DERIVED-UNITS .
+  
+  ***
+  *** For basic units
+  ***    
+  eq $m = $meter .
+  eq $kg = $kilogram .
+  eq $s = $second .
+  eq $A = $ampere .
+  eq $K = $kelvin .
+  eq $mol = $mole .
+  eq $cd = $candela .
+  
+  ***
+  *** For provided derived units
+  ***    
+  eq $f = $feet .
+  eq $km = $kilometer .
+  eq $cm = $centimeter .
+  eq $lb = $pound .  
+  eq $degF = $Fahrenheit .
+  eq $degC = $Celsius .
+  eq $rad = $radian .
+  eq $deg = $degree .
+  eq $sr = $steradian .
+  eq $Hz = $hertz .
+  eq $N = $newton .
+  eq $Pa = $pascal .
+  eq $J = $joule .
+  eq $W = $watt .
+  eq $C = $coulomb .
+  eq $V = $volt .
+  eq $F = $farad .
+  eq $S = $siemens .
+  eq $Wb = $weber .
+  eq $T = $tesla .
+  eq $H = $henry .
+  eq $lm = $lumen .
+  eq $lx = $lux .
+  eq $Bq = $becquerel .
+  eq $Gy = $gray .
+  eq $Sv = $sievert .
+  eq $kat = $katal .
+endfm
+
+***
+*** Filter annotations to maintain just units.
+***
+fmod UNITS-TA-FILTER is 
+  including UNITS .
+  including DERIVED-UNITS .
+  including TYPE-ANNOTATION-HELPERS * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+  
+  vars U U' : Unit . 
+  vars TA TA' : TypeAnn . 
+  var M : Rat . 
+  var Q : Qid .
+  var F : Float .
+
+  ***
+  *** Convert from wrapped type annotation literals into
+  *** policy values .
+  ***
+  eq pv2pv(U U') = pv2pv(U) pv2pv(U') .
+  eq pv2pv($(Q)) = ta2pv($(Q)) .
+  eq pv2pv(U ^ M) = pv2pv(U) ^ M .
+  eq pv2pv(U ^ F) = pv2pv(U) ^ F .
+  eq pv2pv(U) = U [owise] .
+
+  eq ta2pv(TA TA') = ta2pv(TA) ta2pv(TA') .
+  eq ta2pv($('meter)) = $meter .
+  eq ta2pv($('m)) = $m .
+  eq ta2pv($('kilogram)) = $kilogram .
+  eq ta2pv($('kg)) = $kg .
+  eq ta2pv($('second)) = $second .
+  eq ta2pv($('s)) = $s .
+  eq ta2pv($('ampere)) = $ampere .
+  eq ta2pv($('A)) = $A .
+  eq ta2pv($('kelvin)) = $kelvin .
+  eq ta2pv($('K)) = $K .
+  eq ta2pv($('$mole)) = $mole .
+  eq ta2pv($('mol)) = $mol .
+  eq ta2pv($('candela)) = $candela .
+  eq ta2pv($('cd)) = $cd .
+  eq ta2pv($('foot)) = $foot .
+  eq ta2pv($('feet)) = $feet .
+  eq ta2pv($('f)) = $f .
+  eq ta2pv($('mile)) = $mile .
+  eq ta2pv($('kilometer)) = $kilometer .
+  eq ta2pv($('km)) = $km .
+  eq ta2pv($('cm)) = $cm .
+  eq ta2pv($('centimeter)) = $centimeter .
+  eq ta2pv($('pound)) = $pound .
+  eq ta2pv($('lb)) = $lb .
+  eq ta2pv($('Celsius)) = $Celsius .
+  eq ta2pv($('degC)) = $degC .
+  eq ta2pv($('Fahrenheit)) = $Fahrenheit .
+  eq ta2pv($('degF)) = $degF .
+  eq ta2pv($('radian)) = $radian .
+  eq ta2pv($('rad)) = $rad .
+  eq ta2pv($('degree)) = $degree .
+  eq ta2pv($('deg)) = $deg .
+  eq ta2pv($('steradian)) = $steradian .
+  eq ta2pv($('sr)) = $sr .
+  eq ta2pv($('hertz)) = $hertz .
+  eq ta2pv($('Hz)) = $Hz .
+  eq ta2pv($('newton)) = $newton .
+  eq ta2pv($('N)) = $N .
+  eq ta2pv($('pascal)) = $pascal .
+  eq ta2pv($('Pa)) = $Pa .
+  eq ta2pv($('joule)) = $joule .
+  eq ta2pv($('J)) = $J .
+  eq ta2pv($('watt)) = $watt .
+  eq ta2pv($('W)) = $W .
+  eq ta2pv($('coulomb)) = $coulomb .
+  eq ta2pv($('C)) = $C .
+  eq ta2pv($('volt)) = $volt .
+  eq ta2pv($('V)) = $V .
+  eq ta2pv($('farad)) = $farad .
+  eq ta2pv($('F)) = $F .
+  eq ta2pv($('ohm)) = $ohm .
+  eq ta2pv($('siemens)) = $siemens .
+  eq ta2pv($('S)) = $S .
+  eq ta2pv($('weber)) = $weber .
+  eq ta2pv($('Wb)) = $Wb .
+  eq ta2pv($('tesla)) = $tesla .
+  eq ta2pv($('T)) = $T .
+  eq ta2pv($('henry)) = $henry .
+  eq ta2pv($('H)) = $H .
+  eq ta2pv($('lumen)) = $lumen .
+  eq ta2pv($('lm)) = $lm .
+  eq ta2pv($('lux)) = $lux .
+  eq ta2pv($('lx)) = $lx .
+  eq ta2pv($('becquerel)) = $becquerel .
+  eq ta2pv($('Bq)) = $Bq .
+  eq ta2pv($('gray)) = $gray .
+  eq ta2pv($('Gy)) = $Gy .
+  eq ta2pv($('sievert)) = $sievert .
+  eq ta2pv($('Sv)) = $Sv .
+  eq ta2pv($('katal)) = $katal .
+  eq ta2pv($('kat)) = $kat .
+  eq ta2pv(TA) = noType [owise] . *** drop any additional annotations
+endfm
+
+***
+*** Pretty-printer for units; note that we do not pretty print
+*** derived units, just the base units they translate into.
+*** For instance, $hertz would pretty print as "$s ^ -1" .
+***
+fmod UNITS-PRETTY-PRINTER is
+  including PRETTY-PRINT * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+  including DERIVED-UNITS .
+
+  vars U U' : Unit . 
+  var M : Rat . 
+  var N : Nat . 
+  var F : Float .
+  
+  eq pretty-print($meter) = "$meter" .  
+  eq pretty-print($m) = "$m" .
+  eq pretty-print($kilogram) = "$kilogram" .  
+  eq pretty-print($kg) = "$kg" .
+  eq pretty-print($second) = "$second" .  
+  eq pretty-print($s) = "$s" .
+  eq pretty-print($ampere) = "$ampere" .  
+  eq pretty-print($A) = "$A" .
+  eq pretty-print($kelvin) = "$kelvin" .  
+  eq pretty-print($K) = "$K" .
+  eq pretty-print($mole) = "$mole" .  
+  eq pretty-print($mol) = "$mol" .
+  eq pretty-print($candela) = "$candela" .
+  eq pretty-print($cd) = "$cd" .
+  eq pretty-print($foot) = "$foot" .
+  eq pretty-print($feet) = "$feet" .
+  eq pretty-print($f) = "$f" .
+  eq pretty-print($mile) = "$mile" .
+  eq pretty-print($kilometer) = "$kilometer" .
+  eq pretty-print($km) = "$km" .
+  eq pretty-print($cm) = "$cm" .
+  eq pretty-print($centimeter) = "$centimeter" .
+  eq pretty-print($pound) = "$pound" .
+  eq pretty-print($lb) = "$lb" .
+  eq pretty-print($Celsius) = "$Celsius" .
+  eq pretty-print($degC) = "$degC" .
+  eq pretty-print($Fahrenheit) = "$Fahrenheit" .
+  eq pretty-print($degF) = "$degF" .
+  eq pretty-print($radian) = "$radian" .
+  eq pretty-print($rad) = "$rad" .
+  eq pretty-print($degree) = "$degree" .
+  eq pretty-print($deg) = "$deg" .
+  eq pretty-print($steradian) = "$steradian" .
+  eq pretty-print($sr) = "$sr" .
+  
+  eq pretty-print($noUnit) = "$noUnit" .
+  eq pretty-print($cons) = "$cons" .
+  eq pretty-print($fail) = "$fail" .
+    
+  eq pretty-print(NUnit(N)) = "$freshunit(" + string(N,10) + ")" .
+  
+  eq pretty-print(U U') = pretty-print(U) + " " + pretty-print(U') .
+  eq pretty-print(U ^ M) = pretty-print(U) + "^" + string(M,10) .
+  eq pretty-print(U ^ F) = pretty-print(U) + "^" + string(F) .
+endfm
+

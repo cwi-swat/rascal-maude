@@ -1,0 +1,13 @@
+function $U $V test($U x, $V y)
+begin
+  return x * y;
+end
+
+function test2(void)
+begin
+  var $m x;
+  var $f y;
+  var $m $f z;
+
+  z := test(x,y); 
+end

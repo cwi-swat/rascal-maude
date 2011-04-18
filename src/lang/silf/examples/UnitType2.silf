@@ -1,0 +1,11 @@
+function $meter $second ^ -1 sqrt($meter ^ 2 $second ^ -2 x)
+begin
+  # This is a stub; just return the correct result here for type
+  # checking purposes.
+  return cast (x) to ($meter $second ^ -1);
+end
+
+function $meter $second ^ -1 energy2speed($kg $meter ^ 2 $second ^ -2 energy, $kg weight)
+begin
+  return sqrt(2 * energy / weight);
+end

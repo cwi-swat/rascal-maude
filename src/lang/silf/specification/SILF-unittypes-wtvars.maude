@@ -1,0 +1,210 @@
+in SILF-unittypes .
+
+fmod UNITTYPES-WTVARS-DECL-SEMANTICS is
+  including STATE-WTVARS .
+  including UNITTYPES-DECL-SEMANTICS .
+endfm
+
+***
+*** SILF Semantics: Functions
+***
+fmod UNITTYPES-WTVARS-FUNCTION-SEMANTICS is
+  including STATE-WTVARS .
+  including GENERIC-FUNCTION-SEMANTICS * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+
+  vars X X' : Id . 
+  vars K K' : Computation .
+  vars Vl Vl' Vl'' : ValueList .
+  var TX : TypedId .
+  var TXs : TypedIdList . 
+  vars U U' U'' : Unit . 
+  vars PV PV' : Unit .
+  var N : Nat .
+
+  ***
+  *** For units, if a return type is given we use that. If one is NOT given,
+  *** we still need to ensure that the SAME unit is returned by each return
+  *** statement in the function, or we could have different units returned
+  *** along different branches of a program. To do this, we use a "polytype",
+  *** or a polymorphic type, which will be instantiated to the first unit
+  *** it is used with. This gives us a very rough form of unit type inference.
+  *** Note that here we just issue the advisory; the code to generate the
+  *** polytype is given below.
+  ***
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(issueWarning(4,"No unit type given for return type for function " + pretty-print(X) + ", assuming fresh unit.") -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(issueWarning(4,"No unit type given for return type for function " + pretty-print(X) + ", assuming fresh unit.") -> K)
+  if PV == noType .
+       
+  ***
+  *** Used to check the formal parameter signature for proper typing when
+  *** the function itself is being checked. This will bind the proper types
+  *** to each formal parameter. If a type is given, we use that; if no type
+  *** is given, we instead create a fresh unit for each parameter, which is
+  *** just a globally unique unit that is incompatible with all other units.
+  ***
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(checkSigTypes( TXs ) -> val(u(PV')) -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(issueWarning(3,"No unit type given for formal parameter " + pretty-print(X) + ", assigning fresh unit.") -> checkSigTypes( TXs ) -> genFreshUnit -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(issueWarning(3,"No unit type given for formal parameter " + pretty-print(X) + ", assigning fresh unit.") -> checkSigTypes( TXs ) -> genFreshUnit -> bind(X) -> K)
+  if PV == noType .
+
+  ***
+  *** Get the return type; this implements the "polytype" logic described
+  *** above with checkRetType. Note that we don't issue an advisory here,
+  *** since we already did that above.
+  ***
+ ceq k(getRetType( (PV X) ) -> K)= k(val(u(PV')) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(genPolyType -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(genPolyType -> K)
+  if PV == noType .
+  
+  ***
+  *** The logic for extractTypesAux is similar to that used in checkSigTypes; here,
+  *** we want to find the proper type for each typed identifier. Note that we do
+  *** not issue any advisories here; those will have already been issued when
+  *** the function being called was checked, making additional messages redundant.
+  *** The value list at the front gives us a place to build up the results we
+  *** need.
+  ***
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(val(u(PV'),Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(genFreshUnit -> val(Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(genFreshUnit -> val(Vl) -> extractTypesAux( TXs ) -> K)
+  if PV == noType .
+  
+  ***
+  *** Check the provided types against a list of types, reporting any differences
+  *** as type errors. This also checks to make sure the correct number of parameters
+  *** is provided. Note that the first typed identifier in the list given to
+  *** check contains the name of the function.
+  ***
+  *** Extension: For type variables, this is extended to provide some basic
+  *** type variable inference.
+  ***
+  op compare_to_in_aux : ValueList ValueList TypedIdList -> ComputationItem .
+  
+  ***
+  *** This step actually does the inference. inferVars will take the formal parameter types, in Vl',
+  *** and the actuals, in Vl, and find a mapping from vars in Vl' to values in Vl. substVars will then
+  *** substitute this mapping in to the formals, yielding (hopefully) actual units. Compare will then
+  *** check to see if these are compatible.
+  ***
+  eq k( (compare Vl to Vl' in TXs) -> K) = k( makeUnique(Vl') -> (inferVars Vl' from Vl) -> substVarsT(Vl') -> substVars -> (compare Vl to Vl' in TXs aux) -> K) .
+***  eq k( (compare Vl to Vl' in TXs) -> K) = k( (inferVars Vl' from Vl) -> substVars(Vl') -> (compare Vl to Vl' in TXs aux) -> K) .
+  
+  ***
+  *** For compare, if we have a list of values out front, this should replace the formals before we start
+  *** processing them.
+  ***
+  eq k(val(Vl'') -> (compare Vl to Vl' in TXs aux) -> K) =
+     k((compare Vl to Vl'' in TXs aux) -> K) .
+     
+  eq k((compare (u(U), Vl) to (u(U), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k((compare Vl to Vl' in ((PV X), TXs) aux) -> K) .
+     
+  eq k((compare (u($cons), Vl) to (u(U), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k((compare Vl to Vl' in ((PV X), TXs) aux) -> K) .
+
+ ceq k((compare (u(U), Vl) to (u(U'), Vl') in ((PV X), (PV' X'), TXs ) aux) -> K) =
+     k(issueWarning(1,"Unit type failure: function " + pretty-print(X) + ", actual and formal function parameter " + pretty-print(X') + " unit types differ, " + 
+                      pretty-print(U) + "," + pretty-print(U') + ".") -> (compare Vl to Vl' in ((PV X), TXs) aux) -> K)
+  if U =/= U' and U =/= $cons .
+
+  eq k((compare (u(U), Vl) to nil in (PV X) aux) -> K) =
+     k(issueWarning(1,"Type failure: too many arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((compare nil to (u(U'), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k(issueWarning(1,"Type failure: not enough arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((compare nil to nil in (PV X) aux) -> K) = k(K) .
+                        
+  ***
+  *** Get the return type for a call; while a polytype will be assigned
+  *** in the function body, this will just return a fresh type if the
+  *** type is not known, since we can assume that only one unit type
+  *** can be returned from the function.
+  ***
+  *** Extension: Instantiates any type variables in the return type, then drops
+  *** the created type variable map, which only persists from one call to the
+  *** next.
+  ***
+ ceq k(getRetTypeForCall( (PV X) ) -> K)= k(substVarsT(u(PV')) -> substVars -> checkForTVars -> dropVarMap -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetTypeForCall( (PV X) ) -> K) = k(genFreshUnit -> dropVarMap -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetTypeForCall( (PV X) ) -> K) = k(genFreshUnit -> dropVarMap -> K)
+  if PV == noType .
+  
+  ***
+  *** Function return; if we return from a function, we actually just keep going in the
+  *** current function after checking to ensure the return is correct. This is because
+  *** this is a static execution, and we want to cover even code that is technically
+  *** dead code to ensure it is free of type errors. If the type of return is a polytype,
+  *** we also "fix" the type here, so other returns have to return the same type.
+  *** instantiatePType will take care of altering any other storage locations that use
+  *** this ptype, while dropRetType and saveRetType are used to drop the current
+  *** return type in the state and put in the new one.
+  ***
+  eq k(val(u(U)) -> return(u(U)) -> K) = k(K) .
+  eq k(val(u($cons)) -> return(u(U)) -> K) = k(K) .
+  
+ ceq k(val(u(U)) -> return(u(ptype(N))) -> K) = 
+     k(instantiatePType(N,U) -> updateRetType -> K) 
+  if U =/= $cons .
+  
+ ceq k(val(u(U)) -> return(u(U')) -> K) = 
+     k(issueWarning(1,"Unit type error: return expected unit type " + pretty-print(U') + " but return expression evaluates to unit type " + pretty-print(U) + ".") -> K) 
+  if U =/= U' and U =/= $cons and isPType(U') == false .
+endfm
+
+fmod UNITTYPES-WTVARS-SILF-SEMANTICS is
+  including UNITTYPES-DECL-SEMANTICS .
+  including UNITTYPES-LOOKUP-SEMANTICS .
+  including UNITTYPES-ARITH-SEMANTICS .
+  including UNITTYPES-RELATIONAL-SEMANTICS .
+  including UNITTYPES-LOGICAL-SEMANTICS .
+  including UNITTYPES-ASSIGNMENT-SEMANTICS .
+  including UNITTYPES-CONDITIONAL-SEMANTICS .
+  including UNITTYPES-LOOP-SEMANTICS .
+  including UNITTYPES-IO-SEMANTICS .
+  including GENERIC-COMP-SEMANTICS .
+  including UNITTYPES-WTVARS-FUNCTION-SEMANTICS .
+  including GENERIC-PROGRAM-SEMANTICS .
+  including UNITTYPES-ANNOTATION-SEMANTICS .
+  including UNITTYPES-CAST-SEMANTICS .
+  including GENERIC-SILF-SEMANTICS .
+  including UNITS-LONG-FORM .
+
+  var P : Pgm .
+  var Nl : IntList .
+    
+  eq successMsg = "Unit type checking successful." .
+  eq failMsg = "Unit type checking found errors:" .  
+  
+  eq startingState(P,Nl) = k(pgm(P)) env(nil) genv(nil) fenv(nil) ftenv(nil) store([0,nil]) 
+                             nextLoc(loc(0)) log(noOutput) currLoc(sl("nowhere",0,0,0,0,0,0)) c(0) ptcount(0) tvcount(0) .
+  
+endfm
+

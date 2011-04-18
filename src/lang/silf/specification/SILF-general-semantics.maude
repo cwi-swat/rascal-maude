@@ -1,0 +1,481 @@
+***
+*** SILF Semantics: Declarations
+***
+fmod GENERIC-DECL-SEMANTICS is
+  including STATE .
+  
+  var D : Decl .
+  var DL : DeclList .
+  var K : Computation .
+  
+  ***
+  *** Stretch declaration lists out into multiple declaration items.
+  ***
+ ceq decl(D DL) = decl(D) -> decl(DL) if DL =/= noDecls .
+  eq k(decl(noDecls) -> K) = k(K) .
+endfm  
+
+***
+*** SILF Semantics: Lookups/Simple Expressions
+***
+*** PROVIDED POLICY HOOKS
+***   defaultIntVal
+***   defaultBoolVal
+***   extractArrayVal
+***
+fmod GENERIC-LOOKUP-SEMANTICS is
+  including STATE .
+
+  var N : Int . var X : Id . var K : Computation . var L : Location .
+  var E : Exp . var Env : <Id><Location>Set . var B : Bool .
+
+  ***
+  *** Evaluate integer expressions
+  ***
+  op defaultIntVal : -> Value .
+  eq exp(#(N)) = val(defaultIntVal) .
+
+  ***
+  *** Evaluate boolean expressions
+  ***
+  op defaultBoolVal : -> Value .
+  eq exp(b(B)) = val(defaultBoolVal) .
+
+  ***
+  *** Look up standard variable names
+  ***
+  eq k(exp(X) -> K) env(Env [X,L]) = k(lookupLoc(L) -> K) env(Env [X,L]) .
+  eq k(exp(X) -> K) env(Env) = k(issueWarning(1,"Identifier " + pretty-print(X) + " is not defined.") -> noVal -> K) env(Env) .
+
+  ***
+  *** Look up array values
+  ***
+  op extractArrayVal : -> ComputationItem .
+  eq k(exp(X[E]) -> K) = k(exp(X,E) -> extractArrayVal -> K) .
+endfm
+
+***
+*** SILF Semantics: Arithmetic operations
+***
+fmod GENERIC-ARITH-SEMANTICS is
+  including STATE .
+
+  ops + - * / % u- : Exp -> ComputationItem .
+  
+  vars E E' : Exp . 
+
+  eq exp(E + E') = exp(E,E') -> +(E + E') .
+  eq exp(E - E') = exp(E,E') -> -(E - E') .
+  eq exp(E * E') = exp(E,E') -> *(E * E') .
+  eq exp(E / E') = exp(E,E') -> /(E / E') .
+  eq exp(E % E') = exp(E,E') -> %(E % E') .
+  eq exp(- E) = exp(E) -> u-(- E) .
+endfm
+
+***
+*** SILF Semantics: Relational operations
+***
+fmod GENERIC-RELATIONAL-SEMANTICS is
+  including STATE .
+
+  ops lt lte gt gte eq neq : Exp -> ComputationItem .
+
+  vars E E' : Exp . 
+  var K : Computation .
+
+  eq exp(E < E') = exp(E,E') -> lt(E < E') .
+  eq exp(E <= E') = exp(E,E') -> lte(E <= E') .
+  eq exp(E > E') = exp(E,E') -> gt(E > E') .
+  eq exp(E >= E') = exp(E,E') -> gte(E >= E') .
+  eq exp(E = E') = exp(E,E') -> eq(E = E') .
+  eq exp(E != E') = exp(E,E') -> neq(E != E') .
+endfm
+
+***
+*** SILF Semantics: Logical operations
+***
+fmod GENERIC-LOGICAL-SEMANTICS is
+  including STATE .
+
+  ops and or not : Exp -> ComputationItem .
+
+  vars E E' : Exp . 
+  var K : Computation .
+
+  eq k(exp(E and E') -> K) = k(exp(E,E') -> and(E and E') -> K) .
+  eq k(exp(E or E') -> K) = k(exp(E,E') -> or(E or E') -> K) .
+  eq k(exp(not E) -> K) = k(exp(E) -> not(not E) -> K) .
+endfm
+
+***
+*** SILF Semantics: Assignments
+***	
+fmod GENERIC-ASSIGNMENT-SEMANTICS is 
+  including STATE .
+  
+  var X : Id . 
+  vars E E' : Exp . 
+  var K : Computation . 
+  
+  eq k(stmt(X := E) -> K) = k(exp(X,E) -> checkAssign(X,E) -> K) .
+  eq k(stmt(_:=_(_`[_`](X,E),E')) -> K) = k(exp(X,E,E') -> checkArrayAssign(X,E,E') -> K) .
+  
+  op checkAssign : Id Exp -> Computation .
+  op checkArrayAssign : Id Exp Exp -> Computation .
+endfm
+	
+***
+*** SILF Semantics: Conditionals
+***
+fmod GENERIC-CONDITIONAL-SEMANTICS is
+  including STATE .
+
+  var E : Exp . vars St Sf : StmtList . vars K Kt Kf : Computation .
+  vars Dt Df : DeclList . var Env : <Id><Location>Set . 
+  
+  ***
+  *** Automatically convert "one-armed" conditionals into "two-armed"
+  *** versions with else statements.
+  ***
+  eq if_then__fi(E,Dt,St) = if_then__else__fi(E,Dt,St,noDecls,skip) .
+  
+  ***
+  *** Process skip
+  ***
+  op skip : -> Stmt .
+  eq k(stmt(skip) -> K) = k(K) .
+
+  ***
+  *** Stage the "if" after executing the guard
+  ***
+  op if : Exp Computation Computation -> ComputationItem .
+  op checkIfGuard : -> ComputationItem .
+    
+  eq k(stmt(if_then__else__fi(E,Dt,St,Df,Sf)) -> K) env(Env) = 
+     k(exp(E) -> checkIfGuard -> if(E,(decl(Dt) -> stmt(St) -> restoreEnv(Env)),(decl(Df) -> stmt(Sf) -> restoreEnv(Env))) -> K) env(Env) .
+endfm
+	
+***
+*** SILF Semantics: Loops
+***
+fmod GENERIC-LOOP-SEMANTICS is
+  including STATE .
+
+  vars E E' : Exp . var Sl : StmtList . vars K Ke Ks Kf : Computation .
+  var X : Id . var Dl : DeclList . var Env : <Id><Location>Set .
+  var IVL : InvariantList . 
+
+  op for : Id Exp Exp Computation -> ComputationItem .
+  
+  eq k(stmt(for_:=_to__do__od(X,E,E',IVL,Dl,Sl)) -> K) env(Env) =
+     k(exp(X,E,E') -> for(X,E,E',decl(Dl) -> stmt(Sl) -> restoreEnv(Env)) -> K) env(Env) .
+	
+  op while : Exp Computation -> ComputationItem .
+  
+  eq k(stmt(while E IVL do Dl Sl od) -> K) env(Env) = 
+     k(exp(E) -> while(E,decl(Dl) -> stmt(Sl) -> restoreEnv(Env)) -> K) env(Env)  .
+endfm
+
+***
+*** SILF Semantics: I/O
+***
+fmod GENERIC-IO-SEMANTICS is
+  including STATE .
+
+  var E : Exp . 
+  var K : Computation .
+
+  op readVal : -> Value .
+  eq k(exp(read) -> K) = k(val(readVal) -> K) .
+
+  op write : Exp -> ComputationItem .
+  eq stmt(write E) = exp(E) -> write(E) .
+endfm
+     	
+***
+*** SILF Semantics: Sequential Composition
+***
+fmod GENERIC-COMP-SEMANTICS is
+  including STATE .
+
+  var S : Stmt . var Sl : StmtList . var K : Computation .
+  
+ ceq stmt(S Sl) = stmt(S) -> stmt(Sl) if Sl =/= nil .
+  eq k(stmt(nil) -> K) = k(K) .
+endfm
+
+***
+*** Generic function semantics
+***
+fmod GENERIC-FUNCTION-SEMANTICS-BASE is
+  including STATE .
+
+  vars K K' : Computation .
+  vars V V' : Value .
+  vars Vl Vl' : ValueList .
+  var TX : TypedId .
+  var TXs : TypedIdList .
+  var El : ExpList .
+  var X : Id .
+  
+  ***
+  *** Checks the return type; what constitutes a valid return type is left
+  *** to the policy to decide, as well as what action to take when none
+  *** is given.
+  ***
+  op checkRetType : TypedId -> ComputationItem .
+  
+  ***
+  *** Checks the types given to function parameters. This is used when
+  *** checking the function, but is NOT used when checking calls to this
+  *** function from another function. What constitues a valid type
+  *** is left to the policy to decide, as well as what action to take
+  *** when none is given.
+  ***
+  op checkSigTypes : TypedIdList -> ComputationItem .
+  eq k(checkSigTypes(nil) -> K) = k(K) .
+  
+  ***
+  *** Get the return type; like checkRetType, this is policy-specific,
+  *** since it needs to determine what a valid type is and what to do
+  *** when none is given.
+  ***
+  op getRetType : TypedId -> ComputationItem .
+  
+  ***
+  *** Add the return type to the state so we can use it to check
+  *** return statements. The alternative would be to find all the
+  *** return statements and somehow modify them, but this is more
+  *** straight-forward. dropRetType will then remove the added
+  *** state component, retType, when this is needed.
+  ***
+  op saveRetType : TypedId -> ComputationItem .
+  op saveRetType : -> ComputationItem .
+  op retType : Value -> State .
+  op dropRetType : -> ComputationItem .
+  op updateRetType : -> ComputationItem .
+
+  eq k(saveRetType(TX) -> K) = k(getRetType(TX) -> saveRetType -> K) .
+  eq k(val(V) -> saveRetType -> K) = k(K) retType(V) .
+  eq k(dropRetType -> K) retType(V) = k(K) .  
+  eq k(val(V) -> updateRetType -> K) retType(V') = k(K) retType(V) .
+  
+  ***
+  *** checkCall is used in the version of the function used to
+  *** check calls to that function. It expects a list of values
+  *** on top that represent the values being passed as the actuals
+  *** to the functions. What constitues a valid argument or an invalid
+  *** argument is left to the policy to decide. checkCallAux does most
+  *** of the work, actually checking each argument against the supposed
+  *** type.
+  ***
+  op checkCall : TypedIdList -> ComputationItem .
+  op checkCallAux : TypedIdList ValueList -> ComputationItem .
+  op compare_to_in_ : ValueList ValueList TypedIdList -> ComputationItem .
+  
+  eq k(val(Vl) -> checkCall(TX,TXs) -> K) = k(extractTypes(TXs) -> checkCallAux(TX,TXs,Vl) -> K) .
+  eq k(val(Vl) -> checkCallAux(TXs,Vl') -> K) = k((compare Vl' to Vl in (TXs)) -> K) .
+  
+  ***
+  *** Used to check calls; this "pulls out" the proper types so we can use them to
+  *** check against the types of the actual parameters.
+  ***
+  op extractTypes : TypedIdList -> ComputationItem .
+  op extractTypesAux : TypedIdList -> ComputationItem .
+  
+  eq k(extractTypes(TXs) -> K) = k(val(nil) -> extractTypesAux(TXs) -> K) .
+  eq k(val(Vl) -> extractTypesAux(nil) -> K) = k(val(Vl) -> K) .
+  
+  ***
+  *** Get the return type for a call; like checkRetType, this is 
+  *** policy-specific, since it needs to determine what a valid type 
+  *** is and what to do when none is given.
+  ***
+  op getRetTypeForCall : TypedId -> ComputationItem .
+  
+  ***
+  *** Put calls into "canonical" forms
+  ***		      
+  eq exp(X()) = exp(X(nil)) .
+  eq stmt(call X()) = stmt(call X(nil)) .
+  
+  ***
+  *** When calling functions, first evaluate lists of arguments
+  ***
+  eq exp(X(El)) = exp(El) -> apply(X) .
+  eq stmt(call X(El)) = exp(El) -> apply(X) -> discard .
+  
+  ***
+  *** Function application (i.e., invocation). When we call a function, this just
+  *** inlines the call checking code, but does not actually switch context (add a new
+  *** stack frame, etc) like what is done in the dynamic semantics.
+  ***
+  op apply : Id -> ComputationItem .
+
+endfm
+  
+***
+*** SILF Semantics: Functions
+***
+fmod GENERIC-FUNCTION-SEMANTICS is
+  including GENERIC-FUNCTION-SEMANTICS-BASE .
+
+  var TX : TypedId . 
+  var TXs : TypedIdList .  
+  var PPl : PrePostList .
+  var Dl : DeclList .
+  var Sl : StmtList .
+  vars K K' : Computation .
+  vars ICS ICS' : <Id><Computation>Set .
+  var E : Exp .
+  var V : Value .
+  var Vl : ValueList .
+  var X : Id .
+  vars Env Env' : <Id><Location>Set .
+  var RL : RLocation .
+  
+  ***
+  *** For analysis, we need two copies of the function. The one that goes into fenv
+  *** is the one we will "run" when we want to analyze the function; the one
+  *** that goes into ftenv is type signature information that will be used to
+  *** check any call to the function.
+  ***
+  eq k(fdecl(function TX (TXs) PPl begin Dl Sl end) -> K) fenv(ICS) ftenv(ICS') currLoc(RL) =
+     k(K) currLoc(RL)
+     fenv(ICS  [stripType(TX), (rloc(RL) -> checkRetType(TX) -> checkSigTypes(TXs) -> decl(Dl) -> discard -> 
+                                saveRetType(TX) -> stmt(Sl) -> discard -> dropRetType)])
+     ftenv(ICS' [stripType(TX), (checkCall(TX,TXs) -> discard -> getRetTypeForCall(TX))]) .
+
+  ***
+  *** Function return; if we return from a function, we actually just keep going in the
+  *** current function after checking to ensure the return is correct. This is because
+  *** this is a static execution, and we want to cover even code that is technically
+  *** dead code to ensure it is free of type errors.
+  ***
+  op return : Value -> ComputationItem .
+  eq k(stmt(return(E)) -> K) retType(V) = k(exp(E) -> return(V) -> K) retType(V) .
+  
+  ***
+  *** Apply, no annotations; the second case handles situations where the function
+  *** being called does not exist.
+  ***
+  eq k(val(Vl) -> apply(X) -> K) ftenv(ICS [X,K']) genv(Env) env(Env') = 
+     k(pushStore -> val(Vl) -> K' -> restoreEnv(Env') -> popStore -> K) ftenv(ICS [X,K']) genv(Env) env(Env) .
+  eq k(val(Vl) -> apply(X) -> K) ftenv(ICS) genv(Env) env(Env') = 
+     k(issueWarning(1,"Invoked function " + pretty-print(X) + " is undefined.") -> noVal -> K) ftenv(ICS) genv(Env) env(Env') .
+
+endfm
+
+***
+*** Annotation statement semantics.  
+***
+fmod GENERIC-ANNOTATION-SEMANTICS is
+  including STATE .
+
+  ***
+  *** Nothing here, it's all policy specific...
+  ***
+endfm
+
+fmod GENERIC-CAST-SEMANTICS is
+  including STATE .
+ 
+  ***
+  *** Nothing here, it's all policy specific...
+  ***
+endfm
+
+***
+*** SILF Semantics: Programs
+***
+fmod GENERIC-PROGRAM-SEMANTICS is
+  including STATE .
+
+  var S : Stmt . var FDS : FunDeclSet . vars FD FD' : FunDecl .
+  vars Env GEnv : <Id><Location>Set . vars K K' : Computation . var Dl : DeclList .
+  var X : Id .
+
+  eq k(pgm(Dl FDS) -> K) = k(decl(Dl) -> mkGenv -> fdecl(FDS) -> checkAllFuns) .
+  eq k(pgm(FDS) -> K) = k(fdecl(FDS) -> checkAllFuns -> K) .
+  
+  op mkGenv : -> ComputationItem .
+  eq k(mkGenv -> K) env(Env) genv(GEnv) = k(K) env(Env) genv(Env) .
+
+  eq fdecl(FD FD' FDS) = fdecl(FD) -> fdecl(FD' FDS) .
+  
+  vars ICS ICS' : <Id><Computation>Set .  
+  
+  op checkAllFuns : -> ComputationItem .
+  eq k(checkAllFuns) fenv(ICS) = k(checkEachFun(ICS)) fenv(ICS) .
+  
+  op checkEachFun : <Id><Computation>Set -> ComputationItem .
+  op checkFun : Id -> ComputationItem .
+  
+  eq k(checkEachFun([X,K] ICS)) = k(checkFun(X) -> checkEachFun(ICS)) .
+  eq k(checkEachFun(nil)) = k(nil) .
+  
+  var RL : RLocation .
+  eq k(checkFun(X) -> K) fenv([X,K'] ICS) env(Env) genv(GEnv) currLoc(RL) = 
+     k(K' -> rloc(RL) -> K) fenv([X,K'] ICS) env(GEnv) genv(GEnv) currLoc(RL) .
+endfm
+
+fmod GENERIC-SILF-SEMANTICS is
+  including STATE .
+  including CONVERSION .
+
+  var P : Pgm . 
+  var O : Output .
+  vars OS OS' : OutputSet .
+  var OL : OutputList . 
+  var WIS : WarningItemSet . 
+  vars S S' : String .
+  vars I I' I'' : Int .
+  var Nl : IntList .
+  vars N N' : Nat .
+  var RL : RLocation .
+  
+  op startingState : Pgm IntList -> State .
+  
+  op eval : Pgm IntList -> String .
+  eq eval(P,Nl) = get-output(startingState(P,Nl)) .
+
+  op get-output : State -> String .
+  ops successMsg failMsg : -> String .
+  
+ ceq get-output(log(OS) k(nil) AS:State) = successMsg
+  if OS' := filterMsg(2,OS) /\ OS' == noOutput .
+ ceq get-output(log(OS) k(nil) AS:State) = failMsg + S
+  if OS' := filterMsg(2,OS) /\ OS' =/= noOutput /\ S := makeAnalysisMsg(setToList(dropExtras(OS'))) .
+  
+  op makeAnalysisMsg : OutputList -> String .
+  
+  eq makeAnalysisMsg(warning(level(1) msgloc(RL) msg(S) WIS), OL) = 
+     ("||1:::" + rloc2str(RL) + ":::" + S + "||") + makeAnalysisMsg(OL) .
+     
+  eq makeAnalysisMsg(warning(level(2) msgloc(RL) msg(S) WIS), OL) = 
+     ("||2:::" + rloc2str(RL) + ":::" + S + "||") + makeAnalysisMsg(OL) .
+
+  eq makeAnalysisMsg(warning(level(3) msgloc(RL) msg(S) WIS), OL) = 
+     ("||3:::" + rloc2str(RL) + ":::" + S + "||") + makeAnalysisMsg(OL) .
+
+  eq makeAnalysisMsg(warning(level(4) msgloc(RL) msg(S) WIS), OL) = 
+     ("||4:::" + rloc2str(RL) + ":::" + S + "||") + makeAnalysisMsg(OL) .
+     
+  eq makeAnalysisMsg(emptyOL) = "" [owise] .
+
+  vars N1 N2 N3 N4 N5 N6 : Int .
+  op rloc2str : RLocation -> String .
+  eq rloc2str(sl(S, N1, N2, N3, N4, N5, N6 )) = 
+     "|" + S + "::" + string(N1,10) + "::" + string(N2,10) + "::" + string(N3,10) + "::" + 
+           string(N4,10) + "::" + string(N5,10) + "::" + string(N6,10) + "|" .
+
+  op dropExtras : OutputSet -> OutputSet .
+  eq dropExtras(warning(level(I) msgloc(RL) msg(S) WIS) OS) = warning(level(I) msgloc(RL) msg(S)) dropExtras(OS) .
+  eq dropExtras(noOutput) = noOutput .
+
+  op filterMsg : Nat OutputSet -> OutputSet .
+ ceq filterMsg(N, (warning(level(N') WIS) OS)) = filterMsg(N,OS) if N' > N .
+  eq filterMsg(N, (warning(level(N') WIS) OS)) = (warning(level(N') WIS)) filterMsg(N,OS) [owise] .
+  eq filterMsg(N,noOutput) = noOutput .
+endfm
+  

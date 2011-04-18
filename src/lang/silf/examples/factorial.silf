@@ -1,0 +1,18 @@
+function factorial(n)
+begin
+  if n = 0 then
+    return 1;
+  else
+    return n * factorial(n-1);
+  fi
+end
+
+function main(void)
+begin
+  var x; 
+  x := read;
+  while (x > 0) do
+    write factorial(x);
+    x := read;
+  od
+end

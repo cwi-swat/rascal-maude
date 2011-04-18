@@ -1,0 +1,921 @@
+in SILF-unittypes-wtvars .
+in SILF-general-semantics-wann .
+
+***
+*** Extend units with new annotation constructs.
+***
+fmod UNITS-ANNOTATIONS is 
+  including UNITS .
+  including STATE-WCANN .
+
+  var I : Int .
+  var B : Bool .
+  var E : Exp .
+  
+  ***
+  *** Operation to determine the unit of an expression
+  ***
+  op @unit : Exp -> Unit .
+  
+  ***
+  *** Pretty-print @unit units
+  ***
+  eq pretty-print(@unit(E)) = "@unit(" + pretty-print(E) + ")" .
+
+  ***
+  *** Determine units for constants
+  ***
+  eq @unit(#(I)) = $cons .
+  eq @unit(b(B)) = $noUnit .
+  
+  ***
+  *** clearLocVal is defined as "generic"; here we specialize it for units.
+  ***
+  eq clearLocVal = genFreshUnit .  
+endfm
+
+***
+*** Define basic language for manipulating logical formulas in 
+*** assertions and assumptions. Equality here is treated as 
+*** assertion equality; assumption equality is assignment, and 
+*** is handled elsewhere.
+***
+fmod UNIT-EVAL is
+  including STATE-WCANN .
+  including UNITS-ANNOTATIONS .
+
+  var E : Exp . 
+  var K : Computation . 
+  var Rt : Rat .
+  vars U U' : Unit . 
+  vars UE UE' : UnitExp . 
+  vars B B' : Bool .
+  var BU : BaseUnit .
+  
+  ***
+  *** Use when the actual unit of a unit expression (@unit(E))
+  *** needs to be calculated.
+  ***
+  op findActualUnits : Unit -> ComputationItem .
+  op findActualUnits : Rat Unit -> ComputationItem .
+  op findActualUnits : -> ComputationItem .
+  op findActualUnits : Rat -> ComputationItem .
+  op actualUnit : Unit -> ComputationItem .
+  
+  ***
+  *** One unit
+  ***  
+  eq k(findActualUnits(@unit(E)) -> K) =
+     k(exp(E) -> findActualUnits -> K) .
+  eq k(findActualUnits(@unit(E) ^ Rt) -> K) =
+     k(exp(E) -> findActualUnits(Rt) -> K) .
+  eq k(val(u(U)) -> findActualUnits -> K) =
+     k(actualUnit(U) -> K) .
+  eq k(val(u(U)) -> findActualUnits(Rt) -> K) =
+     k(actualUnit(U ^ Rt) -> K) .
+   
+  ***
+  *** Product unit; use the above logic to compute
+  ***     
+  eq k(findActualUnits(@unit(E) U) -> K) =
+     k(exp(E) -> findActualUnits(U) -> K) .
+  eq k(findActualUnits((@unit(E) ^ Rt) U) -> K) =
+     k(exp(E) -> findActualUnits(Rt,U) -> K) .
+  eq k(val(u(U)) -> findActualUnits(U') -> K) =
+     k(findActualUnits(U U') -> K) .
+  eq k(val(u(U)) -> findActualUnits(Rt,U') -> K) =
+     k(findActualUnits((U ^ Rt) U') -> K) .
+     
+  ***
+  *** Corner case (units are given explicitly, like m or lb)
+  ***     
+  eq k(findActualUnits(BU) -> K) = k(actualUnit(BU) -> K) [owise] .
+  
+  ***  
+  *** Find actual units for an entire unit expression. We need to handle each
+  *** case, i.e. and, or, not, etc. 
+  ***  
+  op findActualUnitsExp : UnitExp -> ComputationItem .
+  op actualUnitsExp : UnitExp -> ComputationItem .
+  ops findForAndL findForAndR findForOrL findForOrR : UnitExp -> ComputationItem .
+  ops findForImpL findForImpR : UnitExp -> ComputationItem .
+  ops findForEqL findForEqR : Unit -> ComputationItem .
+  op findForNot : -> ComputationItem .
+    
+  eq k(findActualUnitsExp(UE and UE') -> K) =
+     k(findActualUnitsExp(UE) -> findForAndL(UE') -> K) .
+  eq k(actualUnitsExp(UE) -> findForAndL(UE') -> K) =
+     k(findActualUnitsExp(UE') -> findForAndR(UE) -> K) .
+  eq k(actualUnitsExp(UE') -> findForAndR(UE) -> K) =
+     k(actualUnitsExp(UE and UE') -> K) .
+
+  eq k(findActualUnitsExp(UE or UE') -> K) =
+     k(findActualUnitsExp(UE) -> findForOrL(UE') -> K) .
+  eq k(actualUnitsExp(UE) -> findForOrL(UE') -> K) =
+     k(findActualUnitsExp(UE') -> findForOrR(UE) -> K) .
+  eq k(actualUnitsExp(UE') -> findForOrR(UE) -> K) =
+     k(actualUnitsExp(UE or UE') -> K) .
+          
+  eq k(findActualUnitsExp(UE implies UE') -> K) =
+     k(findActualUnitsExp(UE) -> findForImpL(UE') -> K) .
+  eq k(actualUnitsExp(UE) -> findForImpL(UE') -> K) =
+     k(findActualUnitsExp(UE') -> findForImpR(UE) -> K) .
+  eq k(actualUnitsExp(UE') -> findForImpR(UE) -> K) =
+     k(actualUnitsExp(UE implies UE') -> K) .
+
+  eq k(findActualUnitsExp(U = UE) -> K) =
+     k(findActualUnitsExp(trans(U = UE)) -> K) .               
+  eq k(findActualUnitsExp(U = U') -> K) =
+     k(findActualUnits(U) -> findForEqL(U') -> K) .
+  eq k(actualUnit(U) -> findForEqL(U') -> K) =
+     k(findActualUnits(U') -> findForEqR(U) -> K) .          
+  eq k(actualUnit(U') -> findForEqR(U) -> K) =
+     k(actualUnitsExp(U = U') -> K) .
+     
+  eq k(findActualUnitsExp(not UE) -> K) =
+     k(findActualUnitsExp(UE) -> findForNot -> K) .            
+  eq k(actualUnitsExp(UE) -> findForNot -> K) =
+     k(actualUnitsExp(not UE) -> K) .
+
+  eq k(findActualUnitsExp(@True) -> K) =
+     k(actualUnitsExp(@True) -> K) .
+  eq k(findActualUnitsExp(@False) -> K) =
+     k(actualUnitsExp(@False) -> K) .
+       
+  ***
+  *** Get the boolean value of a unit expression; this is
+  *** performed after the above logic is used to get back
+  *** the units assigned to expressions.
+  ***
+  op checkExp : UnitExp -> Bool .
+
+ ceq checkExp(UE and UE') = B and B'
+  if B := checkExp(UE) /\ B' := checkExp(UE') .
+ ceq checkExp(UE or UE') = B or B'
+  if B := checkExp(UE) /\ B' := checkExp(UE') .
+  eq checkExp(UE implies UE') = checkExp( (not UE) or UE' ) .
+  eq checkExp(not UE) = not checkExp(UE) .
+  eq checkExp(U = U') = compatible(U,U') .
+  eq checkExp(@True) = true .
+  eq checkExp(@False) = false .
+  eq checkExp(UE) = false [owise] . *** be conservative if we miss a case
+endfm
+
+***
+*** Semantics for Unit assumptions. We currently support only one style of 
+*** assumption, which assumes that a scalar or array variable has a certain 
+*** unit: @unit(x) = UNIT_EXP, which could be either a direct unit (meter second^2) 
+*** or the unit of another var or expression (@unit(y)). We can also "and" these
+*** to allow for multiple assumptions in the same assume statement. 
+***
+fmod UNITS-ASSUME-SEMANTICS is
+  including UNIT-EVAL .
+    
+  vars UE UE' : UnitExp . var K : Computation .
+  var U : Unit . var E : Exp . vars BU BU' : BaseUnit .
+  var X : Id . var R : Rat .
+  
+  ***
+  *** Break assumptions separated by logical "and" into multiple assumptions;
+  *** cuts down on special cases. The trans operation ensures assignments
+  *** happen in the correct order -- if we have @unit(a) = @unit(b) = @unit(c), we
+  *** first want to assign the unit to c, then assign that to b, then assign
+  *** that to a, like @unit(c) = <whatever>, @unit(b) = unit(c), @unit(a) = unit(b).
+  *** If we say @unit(a) = @unit(b), @unit(b) = @unit(c), @unit(c) = <whatever>, a, b,
+  *** and c may all get different units (since this is more like assignment than
+  *** equality).
+  ***  
+  eq k(stmt(assume (n('UNITS),UE and UE')) -> K) = 
+     k(stmt(assume(n('UNITS),UE)) -> stmt(assume(n('UNITS),UE')) -> K) .
+  eq k(stmt(assume (n('UNITS),U = UE)) -> K) =
+     k(stmt(assume(n('UNITS),trans(U = UE))) -> K) .
+     
+  ***
+  *** Process each assumption. First, handle basic assumptions which
+  *** don't do any form of assignment. These are assumptions like
+  *** True, or 5 = 3, or $m = $f.
+  ***     
+  eq k(stmt(assume(n('UNITS),@True)) -> K) = k(K) .
+          
+ ceq k(stmt(assume(n('UNITS), BU = BU')) -> K) = k(K)
+  if mergeUnits(BU,BU') =/= $fail .
+
+ ceq k(stmt(assume(n('UNITS), BU = BU')) -> K) = k(K)
+     k(issueWarning(1, "Unit violation detected: trying to assume two incompatible units are equal, " + pretty-print(BU) + "," + pretty-print(BU')) -> K)
+  if mergeUnits(BU,BU') == $fail .
+           
+  ***
+  *** For assumptions with variables (for scalars or arrays) on the left-hand side, like
+  *** assume: @unit(x) = UE, we need to evaluate UE and then assign the result
+  *** to X. For those comparing this to C, we are fortunate here to only have two types
+  *** of values (scalars and arrays), so we can handle them directly here, versus
+  *** having to evaluate the expression in @unit(E) to get back a location to assign into.
+  ***
+  op uassign : Exp -> ComputationItem .
+  op uassign : Unit -> ComputationItem .
+  
+  eq k(stmt(assume (n('UNITS),@unit(E) = U)) -> K) = k(findActualUnits(U) -> uassign(E) -> K) .
+  eq k(stmt(assume (n('UNITS),(@unit(E) ^ R) = U)) -> K) =
+     k(findActualUnits(U ^ (1 / R)) -> uassign(E) -> K) .
+  eq k(actualUnit(U) -> uassign(X) -> K) = k(val(u(U)) -> assignTo(X) -> K) .
+  eq k(actualUnit(U) -> uassign(X [ E ]) -> K) = k(val(u(U)) -> assignTo(X) -> K) .
+  
+  ***
+  *** @result is the result of the function; assumptions mentioning it are not
+  *** really valid, so we just discard them here.
+  ***
+  *** TODO: We may want to issue an advisory, since this really isn't a valid
+  *** thing to do, and it may indicate a lack of awareness of the rules on
+  *** the part of the annotater.
+  ***
+  eq k(actualUnit(U) -> uassign(@result) -> K) = k(K) .
+endfm
+
+***
+*** Semantics of assert statements. Checking an assert is
+*** a two-stage process. First, findActualUnitsExp is used to
+*** find the actual units associated with any embedded SILF
+*** expressions, such as those inside @unit(E) functions.
+*** This returns a unit expression with just units. Second,
+*** checkExp is used to check that these unit expressions
+*** hold, for instance by evaluating any logical operations
+*** contained in the annotation language. If the expression
+*** evaluates to true, the assertion holds; if it is false,
+*** the assertion fails, and we issue an error.
+***
+fmod UNITS-ASSERT-SEMANTICS is
+  including UNIT-EVAL .
+  
+  vars UE UE' : UnitExp . 
+  var K : Computation .
+  
+  ***
+  *** Process each assertion. For @unit(E), we must evaluate E to find
+  *** the location.
+  ***     
+  eq k(stmt(assert(n('UNITS),UE)) -> K) = k(findActualUnitsExp(UE) -> checkResult(UE) -> K) .
+  
+  op checkResult : UnitExp -> ComputationItem .
+  
+ ceq k(actualUnitsExp(UE) -> checkResult(UE') -> K) = 
+     k(K) 
+  if checkExp(UE) .
+  
+ ceq k(actualUnitsExp(UE) -> checkResult(UE') -> K) = 
+     k(issueWarning(1,"Assert failed: " + pretty-print(UE') + " reduces to " + pretty-print(UE) + ", which is false.") -> K) 
+  if not checkExp(UE) .
+endfm
+
+***
+*** SILF Semantics: Declarations for unit types with assume/assert
+*** style annotations. One difference between this and the other
+*** strictly types-based policies is that we allow changes to the units
+*** of variables. However, we still don't allow this for variables
+*** WITH type declarations -- those are handled by making them "final",
+*** which means that the associated type information cannot be changed,
+*** versus non-final variables where the type can change.
+***
+fmod UNITS-ANN-DECL-SEMANTICS is
+  including STATE-WCANN .
+  including GENERIC-DECL-SEMANTICS .
+
+  var X : Id . var N : Int . var K : Computation .
+  var D : Decl . var DL : DeclList . var TA : TypeAnn .
+  var PV : Unit .
+
+  ***
+  *** First case: a standard variable declaration with a type annotation 
+  *** TA =/= noType. ta2pv will strip out annotations from other systems, 
+  *** saving unit-only annotations in PV. This unit value will be bound to 
+  *** X, which will then be "finalized", meaning it can no longer be changed, 
+  *** since that would violate our understanding of typing.
+  ***
+ ceq k(decl(var (TA X)) -> K) = 
+     k(val(u(PV)) -> bind(X) -> finalizeIdentifiers(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV =/= noType .
+
+  ***
+  *** Second and third cases; either we have an annotation, but it isn't a units
+  *** annotation, or we have no type annotation. In both cases, we assign a
+  *** fresh unit to the variable. These represent variables where the
+  *** unit CAN be changed, so we don't finalize them.
+  ***
+ ceq k(decl(var (TA X)) -> K) = k(genFreshUnit -> bind(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV == noType .
+  
+ ceq k(decl(var (TA X)) -> K) = k(genFreshUnit -> bind(X) -> K)
+  if TA == noType .
+
+  ***
+  *** These rules are the same as the standard var rules, since we
+  *** treat arrays the same as standard variables in the analysis
+  *** versus trying to track array indexes. So, arrays with type
+  *** annotations are finalized, while others are not since the
+  *** associated unit can change.
+  ***
+ ceq k(decl(var (TA X)[#(N)]) -> K) = 
+     k(val(u(PV)) -> bind(X) -> finalizeIdentifiers(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV =/= noType .
+  
+ ceq k(decl(var (TA X)[#(N)]) -> K) = k(genFreshUnit -> bind(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV == noType .
+  
+ ceq k(decl(var (TA X)[#(N)]) -> K) = k(genFreshUnit -> bind(X) -> K)
+  if TA == noType .
+endfm
+
+***
+*** SILF Semantics: Assignment
+***
+fmod UNITS-ANN-ASSIGNMENT-SEMANTICS is 
+  including STATE-WCANN .
+  including GENERIC-ASSIGNMENT-SEMANTICS .
+
+  var X : Id . 
+  vars E E' : Exp . 
+  var K : Computation .
+  vars LS LS' : LocationSet . 
+  vars U U' : Unit .
+  var L : Location . 
+  var Env : <Id><Location>Set .
+  vars V V' V'' : Value .
+  
+  ***
+  *** For array assignments, we still want to check both the indexing expression
+  *** and the expression being assigned, but we can then discard the result
+  *** of the indexing expression and switch over to using the standard assignment
+  *** logic found below, since we treat arrays like scalars (i.e., an array
+  *** can only be assigned one unit, regardless of the size of the array).
+  ***
+  eq k(val(V,V',V'') -> checkArrayAssign(X,E,E') -> K) =
+     k(val(V,V'') -> checkAssign(X,E') -> K) .
+     
+  ***
+  *** Assignment case 1: assigning a unit into an assignable location.
+  ***
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS') =
+     k(val(u(U')) -> assignTo(X) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS')
+  if (L notin LS) and (L notin LS') .
+  
+  ***
+  *** Assignment case 2: U and U' are the same, or U' is a constant and will take the unit
+  *** of whatever it is assigned to, so we can always assign. Note that we don't actually
+  *** perform an assignment here, though -- it isn't needed, since the unit does not change.
+  ***
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS') =
+     k(K) env([X,L] Env) lockedLocs(LS) finalLocs(LS')
+  if U == U' or U' == $cons .
+
+  ***
+  *** Assignment case 3: assigning a different unit to a locked and final location; report
+  *** an error message.
+  ***
+  *** NOTE: This case, and the next two, could all be collapsed into a single case, but having
+  *** three allows us to tailor the error message.
+  ***
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS') =
+     k(issueWarning(1,"Error, assigning incompatible unit to explicitly annotated global variable: " + pretty-print(X) + " has unit " + pretty-print(U) + "," + 
+                      pretty-print(E) + " has unit " + pretty-print(U')) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS')
+  if U =/= U' and U' =/= $cons and (L in LS) and (L in LS') .
+  
+  ***
+  *** Assignment case 4: assigning a different unit to a locked location; report
+  *** an error message.
+  ***
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS') =
+     k(issueWarning(1,"Error, assigning incompatible unit to locked global variable: " + pretty-print(X) + " has unit " + pretty-print(U) + "," + 
+                      pretty-print(E) + " has unit " + pretty-print(U')) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS')
+  if U =/= U' and U' =/= $cons and (L in LS) and (L notin LS') .
+  
+  ***
+  *** Assignment case 5: assigning a different unit to a final location; report
+  *** an error message.
+  ***
+ ceq k(val(u(U),u(U')) -> checkAssign(X,E) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS') =
+     k(issueWarning(1,"Error, assigning incompatible unit to explicitly annotated variable: " + pretty-print(X) + " has unit " + pretty-print(U) + "," + 
+                      pretty-print(E) + " has unit " + pretty-print(U')) -> K) env([X,L] Env) lockedLocs(LS) finalLocs(LS')
+  if U =/= U' and U' =/= $cons and (L notin LS) and (L in LS') .
+endfm
+
+***
+*** SILF Semantics: Conditionals
+***
+*** For UNITS analysis, the strategy will be to execute the conditional guard,
+*** then execute each branch in the environment and store resulting from executing
+*** the guard. After execution, we compare the two branches to see if they altered
+*** the store in different ways. If so, we report the variables that are inconsistent
+*** and assign fresh values to them, symbolizing the fact that we do not know the
+*** proper value of these variables after the conditional completes.
+***
+fmod UNITS-ANN-CONDITIONAL-SEMANTICS is
+  including STATE-WCANN .
+  including GENERIC-CONDITIONAL-SEMANTICS .
+
+  var E : Exp . 
+  vars St Sf : StmtList . 
+  vars K Kt Kf : Computation .
+  vars Dt Df : DeclList . 
+  var Env : <Id><Location>Set .
+  vars SFL SFL' : StackFrameList . 
+  var Xl : IdList .
+  var LS : LocationSet .
+  var Ll : LocationList .
+  vars X X' : Id .
+  vars V V' V'' V''' : Value .
+  var Vl : ValueList .
+  
+  ***
+  *** Any unit errors in the guard would have been detected during
+  *** evaluation, and we don't care about the specific unit the guard
+  *** evaluates to, so just discard it. We do need to save the current
+  *** store, though, so we can evaluate each branch in the store and
+  *** see what we get.
+  ***
+  eq k(val(V) -> checkIfGuard -> if(E,Kt,Kf) -> K) store(SFL) =  
+     k(Kt -> stageElse(Kf,SFL) -> K) store(SFL) .
+  
+  ***
+  *** This "stages" the else computation to occur after the if.
+  *** Like above, we need to grab the current store to check for
+  *** differences between the two branches.
+  ***
+  op stageElse : Computation StackFrameList -> ComputationItem .
+  eq k(stageElse(Kf,SFL) -> K) store(SFL') = 
+     k(Kf -> compareStoresIf(SFL') -> K) store(SFL) .
+  
+  ***
+  *** Here is where we compare changes to the store. If we have
+  *** changes, this means that the results of the two branches
+  *** are inconsistent, and we clear out the associated units
+  *** to ensure computations are safe. For those familiar with
+  *** CPF, we don't have sets of environments here, so we
+  *** don't try to track changes along paths.
+  ***
+  *** TODO: This will report errors where both are changed to fresh units.
+  *** Need to decide if we should do this (this may cascade errors from
+  *** nested conditionals), or whether we should just silently assign
+  *** a new fresh unit.
+  ***
+  op compareStoresIf : StackFrameList -> ComputationItem .
+  
+ ceq k(compareStoresIf(SFL) -> K) store(SFL') env(Env) = 
+     k(reportChangesIf(Xl,Vl) -> clearLocs(LS) -> K) store(SFL') env(Env)
+  if LS := getChangedLocs(SFL,SFL') /\ Ll := setToList(LS) /\ len(Ll) > 0 /\ Xl := getIdentsForLocs(Ll,Env) /\ Vl := getValPairsForLocs(Ll,SFL,SFL') .
+
+ ceq k(compareStoresIf(SFL) -> K) store(SFL') env(Env) = 
+     k(K) store(SFL') env(Env)
+  if Ll := setToList(getChangedLocs(SFL,SFL')) /\ len(Ll) == 0 .
+       
+  ***
+  *** Print the actual changed values. Most of the work for this
+  *** is done in printTriples, which actually generates the string
+  *** showing which ids have changed inconsistently, along with
+  *** the values the ids have changed to.
+  ***
+  op reportChangesIf : IdList ValueList -> ComputationItem .
+  eq k(reportChangesIf(Xl,Vl) -> K) = 
+     k(issueWarning(2,"The following variables are changed inconsistently in the branches of the conditional and have been reset to fresh values: " + printTriples(Xl,Vl)) -> K) .
+     
+  ***
+  *** Print the ids and the inconsistent values. Note that, instead
+  *** of matching empty lists, we match lists with "enough left" to
+  *** continue and lists where only one id and two values are left.
+  *** This just lets us make the error messages prettier by separating
+  *** each triple nicely.
+  ***
+  op printTriples : IdList ValueList -> String .
+  eq printTriples( (X,X',Xl), (V,V',V'',V''',Vl) ) = "identifier " + pretty-print(X) + " with values " + pretty-print(val2PolicyVal(V)) + ", " + pretty-print(val2PolicyVal(V')) + "; " + printTriples( (X',Xl), (V'',V''',Vl)) .
+  eq printTriples( X, (V,V') ) = "identifier " + pretty-print(X) + " with values " + pretty-print(val2PolicyVal(V)) + ", " + pretty-print(val2PolicyVal(V')) + "." .
+endfm
+
+***
+*** SILF Semantics: Loops
+***
+*** For UNITS analysis, we use a strategy similar to that used for
+*** conditionals, where we take both "branches" (while condition true,
+*** while condition false) and compare the results. 
+***
+*** One difference with conditionals is that we also have invariants.
+*** If an invariant is present on the loop, we need to check it
+*** both before we enter the loop and at the end of each iteration.
+*** If it holds, we can use the invariant to try to reconcile the
+*** changes we get over different iterations of the loop. If the
+*** invariant covers these changes, we may still assign fresh units,
+*** but we won't consider the changes to cause errors.
+***
+*** NOTE: We cannot use the general loop semantics because they
+*** discard the invariants. So,
+***
+*** TODO: Create a general loop semantics WITH invariants.
+***
+fmod UNITS-ANN-LOOP-SEMANTICS is
+  including STATE-WCANN .
+  including UNITS-ANN-CONDITIONAL-SEMANTICS .
+  including UNITS-ASSUME-SEMANTICS .
+  including UNITS-ASSERT-SEMANTICS .
+  
+  vars E E' : Exp . 
+  vars K Ke Ks Kf : Computation .
+  var X : Id . 
+  vars U U' U'' : Unit .
+  var V : Value .
+  var IVL : InvariantList .
+  var Dl : DeclList .
+  var Sl : StmtList .
+  var Env : <Id><Location>Set .
+  vars SFL SFL' SFL2 SFL3 : StackFrameList . 
+  vars UE UE' : UnitExp .
+  vars N N' : Nat .
+  var LS : LocationSet .
+  var Ll : LocationList .
+  var Xl : IdList .
+  var Vl : ValueList .
+
+  ***
+  *** Check lists of invariants
+  ***
+  op checkInvs : InvariantList -> ComputationItem .
+ ceq k(checkInvs(invariant(X,UE) IVL) -> K) = k(checkInv(invariant(X,UE)) -> checkInvs(IVL) -> K)
+  if IVL =/= noInvs .
+  eq k(checkInvs(invariant(X,UE)) -> K) = k(checkInv(invariant(X,UE)) -> K) .
+  eq k(checkInvs(noInvs) -> K) = k(K) .
+  
+  ***
+  *** Check individual invariants; for now, treat them like asserts.
+  ***
+  op checkInv : Invariant -> ComputationItem .
+  eq k(checkInv(invariant(X,UE)) -> K) = k(findActualUnitsExp(UE) -> checkInvResult(UE) -> K) .
+
+  op checkInvResult : UnitExp -> ComputationItem .
+  
+ ceq k(actualUnitsExp(UE) -> checkInvResult(UE') -> K) = k(K) 
+  if checkExp(UE) .
+  
+ ceq k(actualUnitsExp(UE) -> checkInvResult(UE') -> K) = 
+     k(issueWarning(1,"Invariant failed: " + pretty-print(UE') + " reduces to " + pretty-print(UE) + ", which is false.") -> K) 
+  if not checkExp(UE) .
+  
+  ***
+  *** Process the for loop. Note that we need to check the invariant,
+  *** both before we enter the loop and at the end of each iteration.
+  ***
+  op for : Id Exp Exp InvariantList Computation -> ComputationItem .
+  
+  eq k(stmt(for_:=_to__do__od(X,E,E',IVL,Dl,Sl)) -> K) env(Env) =
+     k(checkInvs(IVL) -> exp(X,E,E') -> for(X,E,E',IVL,decl(Dl) -> stmt(Sl) -> checkInvs(IVL) -> restoreEnv(Env)) -> K) env(Env) .
+  
+  ***
+  *** Given that the loop variable has unit U, the from and to expressions
+  *** must either also have unit U or be of unit $cons; other combinations
+  *** are errors.
+  ***
+  eq k(val(u(U),u(U),u(U)) -> for(X,E,E',IVL,Kf) -> K) store(SFL) = 
+     k(Kf -> checkForLoopInvs(IVL,SFL) -> K) store(SFL) .
+  eq k(val(u(U),u(U),u($cons)) -> for (X,E,E',IVL,Kf) -> K) store(SFL) = 
+     k(Kf -> checkForLoopInvs(IVL,SFL) -> K) store(SFL) .
+  eq k(val(u(U),u($cons),u(U)) -> for (X,E,E',IVL,Kf) -> K) store(SFL) = 
+     k(Kf -> checkForLoopInvs(IVL,SFL) -> K) store(SFL) .
+  eq k(val(u(U),u($cons),u($cons)) -> for (X,E,E',IVL,Kf) -> K) store(SFL) = 
+     k(Kf -> checkForLoopInvs(IVL,SFL) -> K) store(SFL) .
+
+  ***
+  *** These are the error conditions, which are triggered when the above doesn't hold.
+  ***
+ ceq k(val(u(U),u(U'),u(U'')) -> for(X,E,E',IVL,Kf) -> K) store(SFL) =
+     k(issueWarning(1,"Unit type failure, for identifier " + pretty-print(X) + " has unit type " + pretty-print(U) + 
+                      " but from expression has unit type " + pretty-print(U') + ".") -> Kf -> checkForLoopInvs(IVL,SFL) -> K) store(SFL)
+  if U =/= U' and U' =/= $cons .
+
+ ceq k(val(u(U),u(U),u(U'')) -> for(X,E,E',IVL,Kf) -> K) store(SFL) =
+     k(issueWarning(1,"Unit type failure, for identifier " + pretty-print(X) + " has unit type " + pretty-print(U) + 
+                      " but to expression has unit type " + pretty-print(U'') + ".") -> Kf -> checkForLoopInvs(IVL,SFL) -> K) store(SFL)
+  if U =/= U'' and U'' =/= $cons .
+
+       
+  ***
+  *** After the loop iterates once, we can see what changes it made to the store.
+  *** We normally require that branches do not make incompatible changes. Here, with
+  *** the invariant, we will instead check to see if the invariant will "equalize"
+  *** incompatible changes in a way that is useful to the analysis. For instance, an
+  *** invariant may say that @unit(x) = @unit(y). The body of the loop may have
+  *** code like "x := x * x ; y := y * y;". In this case, the units assigned to
+  *** x and y would be different after an iteration of the loop than they would be
+  *** before. However, the assertion would still hold. We can assign them the
+  *** same "fresh" unit at the end of the loop, indicating that they have unknown,
+  *** but compatible, units.
+  ***
+  op checkForLoopInvs : InvariantList StackFrameList -> ComputationItem .
+ ceq k(checkForLoopInvs(IVL,SFL) -> K) store(SFL') =
+     k(finalizeInvariantDiv(SFL,IVL,SFL') -> K) store(SFL')
+  if LS := getChangedLocs(SFL,SFL') /\ len(setToList(LS)) > 0 .
+
+ ceq k(checkForLoopInvs(IVL,SFL) -> K) store(SFL') = k(K) store(SFL')
+  if LS := getChangedLocs(SFL,SFL') /\ len(setToList(LS)) == 0 .
+
+  ***
+  *** Given to stores that don't match, try to make them match by
+  *** assuming the invariant over both. If they still don't match,
+  *** the invariant doesn't cover all the changes.
+  ***    
+  op finalizeInvariantDiv : StackFrameList InvariantList StackFrameList -> ComputationItem .
+  eq k(finalizeInvariantDiv(SFL,IVL,SFL') -> K) c(N) store(SFL2) = 
+     k(createInvariantAssume(IVL) -> finalizeInvariantDiv2(SFL,IVL,SFL',N) -> K) c(N) store(SFL) .
+     
+  op finalizeInvariantDiv2 : StackFrameList InvariantList StackFrameList Nat -> ComputationItem .
+  eq k(finalizeInvariantDiv2(SFL,IVL,SFL',N) -> K) c(N') store(SFL2) =
+     k(createInvariantAssume(IVL) -> finalizeInvariantDiv3(SFL,IVL,SFL',N,SFL2) -> K) c(N) store(SFL') .
+     
+  op finalizeInvariantDiv3 : StackFrameList InvariantList StackFrameList Nat StackFrameList -> ComputationItem .
+ ceq k(finalizeInvariantDiv3(SFL,IVL,SFL',N,SFL2) -> K) env(Env) store(SFL3) =
+     k(reportChangesLoop(Xl,Vl) -> clearLocs(LS) -> K) env(Env) store(SFL3)
+  if LS := getChangedLocs(SFL2,SFL3) /\ Ll := setToList(LS) /\ len(Ll) > 0 /\ Xl := getIdentsForLocs(Ll,Env) /\ Vl := getValPairsForLocs(Ll,SFL2,SFL3) .
+
+ ceq k(finalizeInvariantDiv3(SFL,IVL,SFL',N,SFL2) -> K) env(Env) store(SFL3) =
+     k(K) env(Env) store(SFL3)
+  if LS := getChangedLocs(SFL2,SFL3) /\ Ll := setToList(LS) /\ len(Ll) == 0 .
+    
+  ***
+  *** Print the actual changed values. Most of the work for this
+  *** is done in printTriples, which actually generates the string
+  *** showing which ids have changed inconsistently, along with
+  *** the values the ids have changed to.
+  ***
+  op reportChangesLoop : IdList ValueList -> ComputationItem .
+  eq k(reportChangesLoop(Xl,Vl) -> K) = 
+     k(issueWarning(1,"The following variables are changed inconsistently in the loop and are being reset to fresh values for the rest of the analysis: " + printTriples(Xl,Vl)) -> K) .
+  
+  ***
+  *** Given at least one invariant in the invariant list, generate a statement
+  *** that assumes the invariant. First we will generate initial assignments,
+  *** which give us the "fresh" assignments we need.
+  ***
+  op createInvariantAssume : InvariantList -> ComputationItem .
+  eq createInvariantAssume(invariant(X,UE) IVL) = 
+     stmt(getInitAssignments(joinInvariantExps(invariant(X,UE) IVL))) -> stmt(assume(X,joinInvariantExps(invariant(X,UE) IVL))) .
+  eq createInvariantAssume(IVL) = stmt(nil) [owise] .
+
+  ***
+  *** Take the unit expressions out of the invariants and join them using "and"
+  ***
+  op joinInvariantExps : InvariantList -> UnitExp .
+ ceq joinInvariantExps(invariant(X,UE) IVL) = UE and joinInvariantExps(IVL) if IVL =/= noInvs .
+  eq joinInvariantExps(invariant(X,UE)) = UE [owise] .
+    
+  ***
+  *** In cases where we have assignments in invariants, like
+  *** @unit(x) = @unit(y), return the "end" unit (here, @unit(y)), since
+  *** we can then clear these and carry out the assignments. Don't
+  *** return basic units, i.e., for @unit(x) = $m, don't return $m.
+  ***
+  op getInitAssignments : UnitExp -> StmtList .
+  eq getInitAssignments(UE and UE') = getInitAssignments(UE) getInitAssignments(UE') .
+  eq getInitAssignments(U = UE) = getInitAssignments(UE) .
+  eq getInitAssignments(U = @unit(X)) = (X := #FreshUnit) .
+  eq getInitAssignments(UE) = nil [owise] .
+  
+  op #FreshUnit : -> Exp .
+  eq k(exp(#FreshUnit) -> K) c(N) = k(val(u(NUnit(N))) -> K) c(s(N)) .
+  
+  ***
+  *** While loop semantics. Like with for loops, we need to check the invariants.
+  ***
+  op while : Exp InvariantList Computation -> ComputationItem .
+  
+  eq k(stmt(while E IVL do Dl Sl od) -> K) env(Env) = 
+     k(checkInvs(IVL) -> exp(E) -> while(E,IVL,decl(Dl) -> stmt(Sl) -> checkInvs(IVL) -> restoreEnv(Env)) -> K) env(Env)  .
+  
+  ***
+  *** For while loops, we evaluate the guard and then the body. Checking the
+  *** invariant is the same as for the for loop.
+  ***    
+  eq k(val(V) -> while(E,IVL,Ks) -> K) store(SFL) = 
+     k(Ks -> checkWhileLoopInvs(IVL,SFL) -> K) store(SFL) .
+     
+  op checkWhileLoopInvs : InvariantList StackFrameList -> ComputationItem .
+ ceq k(checkWhileLoopInvs(IVL,SFL) -> K) store(SFL') =
+     k(finalizeInvariantDiv(SFL,IVL,SFL') -> K) store(SFL')
+  if LS := getChangedLocs(SFL,SFL') /\ len(setToList(LS)) > 0 .
+     
+endfm
+
+***
+*** SILF Semantics: Functions
+***
+fmod UNITS-ANN-FUNCTION-SEMANTICS is
+  including STATE-WCANN .
+  including GENERIC-FUNCTION-SEMANTICS-PREPOST * ( sort PolicyExp to UnitExp, sort PolicyVal to Unit ) .
+
+  vars X X' : Id . 
+  vars K K' : Computation .
+  vars Vl Vl' Vl'' : ValueList .
+  var TX : TypedId .
+  var TXs : TypedIdList . 
+  vars U U' U'' : Unit . 
+  vars PV PV' : Unit .
+  var N : Nat .
+  var UE : UnitExp .
+  var PPl : PrePostList .
+
+  ***
+  *** For units with code annotations. This would normally issue an error
+  *** or warning of some sort if no type is provided. We actually don't do 
+  *** anything here for this policy, since we may have a postcondition 
+  *** that handles the return type, even if no type annotations do so.
+  ***
+  *** TODO: In the future, it may be useful to check the postconditions
+  *** for an assignment to @result. In the situation where there is
+  *** no assignment to @result and no annotation, we could issue some
+  *** sort of warning.
+  ***
+  eq k(checkRetType( (PV X) ) -> K) = k(K) .
+       
+  ***
+  *** Used to check the formal parameter signature for proper typing when
+  *** the function itself is being checked. This will bind the proper types
+  *** to each formal parameter. If a type is given, we use that; if no type
+  *** is given, we instead create a fresh unit for each parameter, which is
+  *** just a globally unique unit that is incompatible with all other units.
+  *** We don't both issuing a warning if no type is given; it could be in
+  *** the precondition, or just left out altogether, and either case is fine.
+  ***
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(checkSigTypes( TXs ) -> val(u(PV')) -> bind(X) -> finalizeIdentifiers(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(checkSigTypes( TXs ) -> genFreshUnit -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(checkSigTypes( TXs ) -> genFreshUnit -> bind(X) -> K)
+  if PV == noType .
+
+  ***
+  *** Get the return type; this implements the "polytype" logic described
+  *** above with checkRetType. We will always generate a polytype if it
+  *** appears here that we need one, but, based on the postcondition, we
+  *** may not actually use it. Note that we actually bind it here to an
+  *** identifier named @result; this will make it easier later to use
+  *** the postconditions.
+  ***
+ ceq k(getRetType( (PV X) ) -> K)= k(val(u(PV')) -> bind(@result) -> exp(@result) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(genPolyType -> bind(@result) -> exp(@result) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(genPolyType -> bind(@result) -> exp(@result) -> K)
+  if PV == noType .
+  
+  ***
+  *** The logic for extractTypesAux is similar to that used in checkSigTypes; here,
+  *** we want to find the proper type for each typed identifier. Note that we do
+  *** not issue any advisories here; those will have already been issued when
+  *** the function being called was checked, making additional messages redundant.
+  *** The value list at the front gives us a place to build up the results we
+  *** need.
+  ***
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(val(u(PV'),Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(genFreshUnit -> val(Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(genFreshUnit -> val(Vl) -> extractTypesAux( TXs ) -> K)
+  if PV == noType .
+  
+  ***
+  *** Check the provided types against a list of types, reporting any differences
+  *** as type errors. This also checks to make sure the correct number of parameters
+  *** is provided. Note that the first typed identifier in the list given to
+  *** check contains the name of the function. Here we also bind the provided
+  *** unit to the parameter, so that it can be used in code annotation checking.
+  ***
+  *** Extension: For type variables, this is extended to provide some basic
+  *** type variable inference. Note that is this borrowed directly from SILF-unittypes-wtvars.
+  ***
+  *** TODO: Find a way to abstract out some of this logic so it can be reused
+  *** easily in other policies.
+  ***
+  op comparebind_to_in_aux : ValueList ValueList TypedIdList -> ComputationItem .
+  
+  eq k( (comparebind Vl to Vl' in TXs) -> K) = k( makeUnique(Vl') -> (inferVars Vl' from Vl) -> substVarsT(Vl') -> substVars -> (comparebind Vl to Vl' in TXs aux) -> K) .
+  
+  eq k(val(Vl'') -> (comparebind Vl to Vl' in TXs aux) -> K) =
+     k((comparebind Vl to Vl'' in TXs aux) -> K) .
+     
+  eq k((comparebind (u(U), Vl) to (u(U), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k((comparebind Vl to Vl' in ((PV X), TXs) aux) -> val(u(U)) -> bind(X') -> K) .
+     
+  eq k((comparebind (u($cons), Vl) to (u(U), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k((comparebind Vl to Vl' in ((PV X), TXs) aux) -> val(u(U)) -> bind(X') -> K) .
+
+ ceq k((comparebind (u(U), Vl) to (u(U'), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k(issueWarning(1,"Unit type failure: function " + pretty-print(X) + ", actual and formal function parameter " + pretty-print(X') + " unit types differ, " + 
+                      pretty-print(U) + "," + pretty-print(U') + ".") -> (comparebind Vl to Vl' in ((PV X), TXs) aux) -> val(u(U)) -> bind(X') -> K)
+  if U =/= U' and U =/= $cons and isFreshUnit(U') == false .
+
+ ceq k((comparebind (u(U), Vl) to (u(U'), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k((comparebind Vl to Vl' in ((PV X), TXs) aux) -> val(u(U)) -> bind(X') -> K)
+  if U =/= U' and (U == $cons or isFreshUnit(U')) .
+  
+  eq k((comparebind (u(U), Vl) to nil in (PV X) aux) -> K) =
+     k(issueWarning(1,"Type failure: too many arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((comparebind nil to (u(U'), Vl') in ((PV X), (PV' X'), TXs) aux) -> K) =
+     k(issueWarning(1,"Type failure: not enough arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((comparebind nil to nil in (PV X) aux) -> K) = k(K) .
+                        
+  ***
+  *** Get the return type for a call; note that any assignment to @result
+  *** that occurs in a postcondition will take precedence over the unit
+  *** given as a type annotation.
+  ***
+ ceq k(getRetValForCall( (PV X), PPl ) -> K)= 
+     k(substVarsT(u(PV')) -> substVars -> checkForTVars -> dropVarMap -> bind(@result) -> applyPostConds(filterForPost(PPl)) -> exp(@result) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetValForCall( (PV X), PPl ) -> K) = 
+     k(genFreshUnit -> bind(@result) -> dropVarMap -> applyPostConds(filterForPost(PPl)) -> exp(@result) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetValForCall( (PV X), PPl ) -> K) = 
+     k(genFreshUnit -> bind(@result) -> dropVarMap -> applyPostConds(filterForPost(PPl)) -> exp(@result) -> K)
+  if PV == noType .
+  
+  ***
+  *** Function return; if we return from a function, we actually just keep going in the
+  *** current function after checking to ensure the return is correct. This is because
+  *** this is a static execution, and we want to cover even code that is technically
+  *** dead code to ensure it is free of type errors. If the type of return is a polytype,
+  *** we also "fix" the type here, so other returns have to return the same type.
+  *** instantiatePType will take care of altering any other storage locations that use
+  *** this ptype, while dropRetType and saveRetType are used to drop the current
+  *** return type in the state and put in the new one.
+  ***
+  eq k(val(u(U)) -> return(u(U),PPl) -> K) = k(val(u(U)) -> assignTo(@result) -> checkPostConds(PPl) -> K) .
+  eq k(val(u($cons)) -> return(u(U),PPl) -> K) = k(val(u($cons)) -> assignTo(@result) -> checkPostConds(PPl) -> K) .
+  
+ ceq k(val(u(U)) -> return(u(ptype(N)),PPl) -> K) = 
+     k(instantiatePType(N,U) -> assignTo(@result) -> exp(@result) -> updateRetType -> checkPostConds(PPl) -> K) 
+  if U =/= $cons .
+  
+ ceq k(val(u(U)) -> return(u(U'),PPl) -> K) = 
+     k(issueWarning(1,"Unit type error: return expected unit type " + pretty-print(U') + " but return expression evaluates to unit type " + pretty-print(U) + ".") -> val(u(U)) -> assignTo(@result) -> checkPostConds(PPl) -> K) 
+  if U =/= U' and U =/= $cons and isPType(U') == false .
+  
+  ***
+  *** Apply just preconditions
+  ***
+  eq k(applyPreConds(pre(X,UE) PPl) -> K) = k(stmt(assume(X,UE)) -> applyPreConds(PPl) -> K) .
+
+  ***
+  *** Apply postconditions at call sites
+  ***
+  eq k(applyPostConds(post(X,UE) PPl) -> K) = k(stmt(assume(X,UE)) -> applyPostConds(PPl) -> K) .
+
+  ***
+  *** Check the preconditions at a call site
+  ***
+  eq k(checkPreCondsAux(pre(X,UE) PPl) -> K) = k(stmt(assert(X,UE)) -> checkPreCondsAux(PPl) -> K) .
+  
+  ***
+  *** Check the postconditions at a function return
+  ***
+  eq k(checkPostCondsAux(post(X,UE) PPl) -> K) = k(stmt(assert(X,UE)) -> checkPostCondsAux(PPl) -> K) .
+      
+endfm
+
+fmod UNITS-ANN-SILF-SEMANTICS is
+  including UNITS-ANNOTATIONS .
+  including UNIT-EVAL .
+  including UNITS-ASSUME-SEMANTICS .
+  including UNITS-ASSERT-SEMANTICS .
+  including UNITS-ANN-DECL-SEMANTICS .
+  including UNITTYPES-LOOKUP-SEMANTICS .
+  including UNITTYPES-ARITH-SEMANTICS .
+  including UNITTYPES-RELATIONAL-SEMANTICS .
+  including UNITTYPES-LOGICAL-SEMANTICS .
+  including UNITS-ANN-ASSIGNMENT-SEMANTICS .
+  including UNITS-ANN-CONDITIONAL-SEMANTICS .
+  including UNITS-ANN-LOOP-SEMANTICS .
+  including UNITTYPES-IO-SEMANTICS .
+  including GENERIC-COMP-SEMANTICS .
+  including UNITS-ANN-FUNCTION-SEMANTICS .
+  including GENERIC-PROGRAM-SEMANTICS .
+  including UNITTYPES-ANNOTATION-SEMANTICS .
+  including UNITTYPES-CAST-SEMANTICS .
+  including GENERIC-SILF-SEMANTICS .
+  including UNITS-LONG-FORM .
+
+  var P : Pgm .
+  var Nl : IntList .
+    
+  eq successMsg = "Unit type checking successful." .
+  eq failMsg = "Unit type checking found errors:" .  
+  
+  eq startingState(P,Nl) = k(pgm(P)) env(nil) genv(nil) fenv(nil) ftenv(nil) store([0,nil]) nextLoc(loc(0)) old(noState)
+                           log(noOutput) currLoc(sl("nowhere",0,0,0,0,0,0)) c(0) ptcount(0) tvcount(0) lockedLocs(nilLS) 
+                           finalLocs(nilLS) .
+  
+endfm

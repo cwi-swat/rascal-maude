@@ -1,0 +1,522 @@
+in SILF-syntax .
+in SILF-state .
+in SILF-policies .
+in SILF-types .
+in SILF-general-semantics .
+
+***
+*** Type checking semantics: Declarations
+***
+fmod TCHECK-DECL-SEMANTICS is
+  including STATE .
+  including GENERIC-DECL-SEMANTICS .
+  
+  var X : Id . var N : Int . var K : Computation .
+  var D : Decl . var DL : DeclList . var TA : TypeAnn .
+  var PV : Type .
+
+  ***
+  *** First case: a standard variable declaration with a type annotation 
+  *** TA =/= noType. ta2pv will strip out annotations from other systems, 
+  *** saving unit-only annotations in PV. This unit value will be bound to 
+  *** X, which will then be "finalized", meaning it can no longer be changed, 
+  *** since that would violate our understanding of typing.
+  ***
+ ceq k(decl(var (TA X)) -> K) = 
+     k(val(t(PV)) -> bind(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV =/= noType .
+
+  ***
+  *** Second and third cases; either we have an annotation, but it isn't a type
+  *** annotation, or we have no type annotation. Since we require all variables,
+  *** function return types, and parameter types to be given explicitly, this is
+  *** an error.
+  ***
+ ceq k(decl(var (TA X)) -> K) = 
+     k(issueWarning(1,"No type given for variable " + pretty-print(X)) -> val(t($notype))-> bind(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV == noType .
+  
+ ceq k(decl(var (TA X)) -> K) = 
+     k(issueWarning(1,"No type given for variable " + pretty-print(X)) -> val(t($notype))-> bind(X) -> K)
+  if TA == noType .
+
+  ***
+  *** These rules are the same as the standard var rules, except we take the given
+  *** type and make it into an array type.
+  ***
+ ceq k(decl(var (TA X)[#(N)]) -> K) = 
+     k(val(t($array(PV))) -> bind(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV =/= noType .
+  
+ ceq k(decl(var (TA X)[#(N)]) -> K) = 
+     k(issueWarning(1,"No type given for array variable " + pretty-print(X)) -> val(t($array($notype)))-> bind(X) -> K)
+  if TA =/= noType /\ PV := ta2pv(TA) /\ PV == noType .
+  
+ ceq k(decl(var (TA X)[#(N)]) -> K) = 
+     k(issueWarning(1,"No type given for array variable " + pretty-print(X)) -> val(t($array($notype)))-> bind(X) -> K)
+  if TA == noType .
+endfm
+
+***
+*** Type checking semantics: Lookups/Simple Expressions
+***
+*** Defines policy hooks
+***   defaultIntVal
+***   defaultBoolVal
+***   extractArrayVal
+***
+fmod TCHECK-LOOKUP-SEMANTICS is
+  including STATE .
+  including GENERIC-LOOKUP-SEMANTICS .
+  
+  var N : Int . var X : Id . var K : Computation . var L : Location .
+  var E : Exp . var Env : <Id><Location>Set . var B : Bool .
+  vars T T' : Type .
+
+  ***
+  *** The default int value is the type $int
+  ***
+  eq defaultIntVal = t($int) .
+  
+  ***
+  *** The default bool value is the type $bool
+  ***
+  eq defaultBoolVal = t($bool) .
+  
+  ***
+  *** To handle arrays, we need to extract the type given for the
+  *** array identifier -- i.e., we need to find the type of X, which
+  *** should be $array(T), and return T.
+  ***
+  eq k(val(t(T),t(T')) -> extractArrayVal -> K) = 
+     k(val(t(T)) -> returnElementType -> K) .
+  
+  ***
+  *** When we have an array X, it will have a type like $array($int).
+  *** When we look up an item in the array, we want to return the type
+  *** of the item itself, like $int. This strips off the $array wrapper.
+  ***
+  op returnElementType : -> ComputationItem .
+  eq k(val(t($array(T))) -> returnElementType -> K) =
+     k(val(t(T)) -> K) .
+     
+  ***
+  *** Provide a concrete value for noval, here we just assume it is
+  *** an $int
+  ***
+  eq noVal = val(t($int)) .
+endfm
+
+***
+*** Type checking semantics: Arithmetic operations
+***
+fmod TCHECK-ARITH-SEMANTICS is
+  including STATE .
+  including GENERIC-ARITH-SEMANTICS .
+  
+  vars E E' : Exp . 
+  vars T T' : Type . 
+  var K : Computation .
+
+  eq k(val(t($int),t($int)) -> +(E) -> K) = k(val(t($int)) -> K) .
+  eq k(val(t($int),t($int)) -> -(E) -> K) = k(val(t($int)) -> K) .
+  eq k(val(t($int),t($int)) -> *(E) -> K) = k(val(t($int)) -> K) .
+  eq k(val(t($int),t($int)) -> /(E) -> K) = k(val(t($int)) -> K) .
+  eq k(val(t($int),t($int)) -> %(E) -> K) = k(val(t($int)) -> K) .
+  eq k(val(t($int)) -> -(E) -> K) = k(val(t($int)) -> K) .
+
+ ceq k(val(t(T),t(T')) -> +(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($int)) -> K)
+  if T =/= $int or T' =/= $int .
+
+ ceq k(val(t(T),t(T')) -> -(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($int)) -> K)
+  if T =/= $int or T' =/= $int .
+
+ ceq k(val(t(T),t(T')) -> *(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($int)) -> K)
+  if T =/= $int or T' =/= $int .
+
+ ceq k(val(t(T),t(T')) -> /(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($int)) -> K)
+  if T =/= $int or T' =/= $int .
+
+ ceq k(val(t(T),t(T')) -> %(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($int)) -> K)
+  if T =/= $int or T' =/= $int .
+
+ ceq k(val(t(T)) -> u-(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T)) -> val(t($int)) -> K)
+  if T =/= $int .
+endfm
+
+***
+*** Type checking semantics: Relational operations
+***
+fmod TCHECK-RELATIONAL-SEMANTICS is
+  including STATE .
+  including GENERIC-RELATIONAL-SEMANTICS .
+
+  vars E E' : Exp . 
+  vars T T' : Type . 
+  var K : Computation .
+
+  eq k(val(t($int),t($int)) -> lt(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($int),t($int)) -> lte(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($int),t($int)) -> gt(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($int),t($int)) -> gte(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($int),t($int)) -> eq(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($int),t($int)) -> neq(E) -> K) = k(val(t($bool)) -> K) .
+
+ ceq k(val(t(T),t(T')) -> lt(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $int or T' =/= $int .
+  
+ ceq k(val(t(T),t(T')) -> lte(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $int or T' =/= $int .
+      
+ ceq k(val(t(T),t(T')) -> gt(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $int or T' =/= $int .
+      
+ ceq k(val(t(T),t(T')) -> gte(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $int or T' =/= $int .
+      
+ ceq k(val(t(T),t(T')) -> eq(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $int or T' =/= $int .
+      
+ ceq k(val(t(T),t(T')) -> neq(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $int or T' =/= $int .
+endfm
+
+***
+*** Type checking semantics: Logical operations
+***
+fmod TCHECK-LOGICAL-SEMANTICS is
+  including STATE .
+  including GENERIC-LOGICAL-SEMANTICS .
+  
+  vars E E' : Exp . 
+  vars T T' : Type . 
+  var K : Computation .
+
+  eq k(val(t($bool),t($bool)) -> and(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($bool),t($bool)) -> or(E) -> K) = k(val(t($bool)) -> K) .
+  eq k(val(t($bool)) -> not(E) -> K) = k(val(t($bool)) -> K) .
+  
+ ceq k(val(t(T),t(T')) -> and(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $bool or T' =/= $bool .
+ ceq k(val(t(T),t(T')) -> or(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T) + "," + pretty-print(T')) -> val(t($bool)) -> K)
+  if T =/= $bool or T' =/= $bool .
+ ceq k(val(t(T)) -> not(E) -> K) = 
+     k(issueWarning(1,"Type failure, incompatible operands: " + pretty-print(E) + "," + pretty-print(T)) -> val(t($bool)) -> K)
+  if T =/= $bool .
+endfm
+
+***
+*** Type checking semantics: Assignment
+***
+fmod TCHECK-ASSIGNMENT-SEMANTICS is 
+  including STATE .
+  including GENERIC-ASSIGNMENT-SEMANTICS .
+  
+  var X : Id . vars E E' : Exp . vars T T' T'' : Type . 
+  var K : Computation . 
+  
+  eq k(val(t(T),t(T)) -> checkAssign(X,E) -> K) = k(K) .
+  
+ ceq k(val(t(T),t(T')) -> checkAssign(X,E) -> K) =
+     k(issueWarning(1,"Type failure, invalid assignment: identifier " + pretty-print(X) + " has type " + pretty-print(T) + 
+                      " and expression " + pretty-print(E) + " has type " + pretty-print(T') + ".") -> K)
+  if T =/= T' .		      
+
+  eq k(val(t($array(T)),t($int),t(T)) -> checkArrayAssign(X,E,E') -> K) = k(K) .
+  
+ ceq k(val(t(T),t(T'),t(T'')) -> checkArrayAssign(X,E,E') -> K) =
+     k(issueWarning(1,"Type failure, identifier " + pretty-print(X) + " has type " + pretty-print(T) + ", not an array type.") -> K)
+  if isArrayType(T) == false .
+
+ ceq k(val(t($array(T)),t(T'),t(T'')) -> checkArrayAssign(X,E,E') -> K) =
+     k(issueWarning(1,"Type failure, index expression " + pretty-print(E) + " has type " + pretty-print(T) + ", not int.") -> K)
+  if T' =/= $int .
+    
+ ceq k(val(t($array(T)),t($int),t(T'')) -> checkArrayAssign(X,E,E') -> K) =
+     k(issueWarning(1,"Type failure, attempt to assign expression " + pretty-print(E') + " of type " + pretty-print(T'') + " to array " + 
+                      pretty-print(X) + " of type " + pretty-print(T) + ".") -> K)
+  if T =/= T'' .
+endfm
+
+***
+*** Type checking semantics: Conditionals
+***
+fmod TCHECK-CONDITIONAL-SEMANTICS is
+  including STATE .
+  including GENERIC-CONDITIONAL-SEMANTICS .
+  
+  var E : Exp . vars St Sf : StmtList . vars K Kt Kf : Computation .
+  vars Dt Df : DeclList . var Env : <Id><Location>Set . var T : Type .
+  
+  eq k(val(t($bool)) -> checkIfGuard -> if(E,Kt,Kf) -> K) = k(Kt -> Kf -> K) .
+ ceq k(val(t(T)) -> checkIfGuard -> if(E,Kt,Kf) -> K) =
+     k(issueWarning(1,"Type failure, expression " + pretty-print(E) + " should have type $bool, but has type " + pretty-print(T) + ".") -> Kt -> Kf -> K)
+  if T =/= $bool .
+endfm
+
+***
+*** SILF Semantics: Loops
+***
+fmod TCHECK-LOOP-SEMANTICS is
+  including STATE .
+  including GENERIC-LOOP-SEMANTICS .
+
+  vars E E' : Exp . var Sl : StmtList . vars K Ke Ks Kf : Computation .
+  var X : Id . var Dl : DeclList . var Env : <Id><Location>Set .
+  var IVL : InvariantList . vars T T' T'' : Type .
+
+  ***
+  *** For semantics
+  ***
+  eq k(val(t($int),t($int),t($int)) -> for(X,E,E',Kf) -> K) = k(Kf) .
+  
+ ceq k(val(t(T),t(T'),t(T'')) -> for(X,E,E',Kf) -> K) =
+     k(issueWarning(1,"Type failure, for identifier " + pretty-print(X) + " should have type $int but has type " + pretty-print(T) + ".") -> Kf -> K)
+  if T =/= $int .
+
+ ceq k(val(t($int),t(T'),t(T'')) -> for(X,E,E',Kf) -> K) =
+     k(issueWarning(1,"Type failure, for from index expression " + pretty-print(E) + " should have type $int but has type " + pretty-print(T') + ".") -> Kf -> K)
+  if T' =/= $int .
+
+ ceq k(val(t($int),t($int),t(T'')) -> for(X,E,E',Kf) -> K) =
+     k(issueWarning(1,"Type failure, for to index expression " + pretty-print(E') + " should have type $int but has type " + pretty-print(T'') + ".") -> Kf -> K)
+  if T'' =/= $int .
+    
+  ***
+  *** While semantics
+  ***    
+  eq k(val(t($bool)) -> while(E,Ks) -> K) = k(Ks -> K) .
+  
+ ceq k(val(t(T)) -> while(E,Ks) -> K) =
+     k(issueWarning(1, "Type failure, while guard " + pretty-print(E) + " should have type $bool but has type " + pretty-print(T) + ".") -> Ks -> K)
+  if T =/= $bool .
+endfm
+
+***
+*** SILF Semantics: I/O
+***
+fmod TCHECK-IO-SEMANTICS is
+  including STATE .
+  including GENERIC-IO-SEMANTICS .
+  
+  var E : Exp . 
+  var K : Computation .
+  var T : Type .
+
+  ***
+  *** Read always returns an int, so this is the read value
+  ***
+  eq readVal = t($int) .
+
+  ***
+  *** Write should be given an integer
+  ***
+  eq k(val(t($int)) -> write(E) -> K) = k(K) .
+ ceq k(val(t(T)) -> write(E) -> K) =
+     k(issueWarning(1,"Type failure: write expression " + pretty-print(E) + " has type " + pretty-print(T) + ", expected type $int.") -> K)
+  if T =/= $int .
+endfm
+
+***
+*** SILF Semantics: Functions
+***
+fmod TCHECK-FUNCTION-SEMANTICS is
+  including STATE .
+  including GENERIC-FUNCTION-SEMANTICS * ( sort PolicyExp to TypeExp, sort PolicyVal to Type ) .
+
+  vars X X' : Id . var Xs : IdList . var S : Stmt . vars K K' : Computation .
+  vars ICS ICS' : <Id><Computation>Set . var El : ExpList . vars Vl Vl' : ValueList .
+  var ECL : <<Id><Location>Set><Computation>List . 
+  vars Env Env' GEnv : <Id><Location>Set .
+  var E : Exp . var V : Value . var SF : StackFrame . 
+  var SFL : StackFrameList . var N : Nat . var Sl : StmtList .
+  var Dl : DeclList . var PPl : PrePostList . var TX : TypedId .
+  var TXs : TypedIdList . vars T T' T'' : Type . vars TA TA' : TypeAnn .
+  vars PV PV' : Type .
+  
+  ***
+  *** For type checking, the return type must be given. If it is not,
+  *** we will issue a type warning.
+  ***
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(issueWarning(1,"Type failure: function " + pretty-print(X) + " has not been given a return type.") -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkRetType( (PV X) ) -> K) =
+     k(issueWarning(1,"Type failure: function " + pretty-print(X) + " has not been given a return type.") -> K)
+  if PV == noType .
+    
+  ***
+  *** Used when checking the function; this will extract out just those types used 
+  *** in this policy to bind them to the formal parameters, giving us assigned types
+  *** for each. We will issue type failure messages in cases where no type is given.
+  ***
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(checkSigTypes( TXs ) -> val(t(PV')) -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(issueWarning(1,"Type failure: formal parameter " + pretty-print(X) + " has not been given a type.") -> checkSigTypes( TXs ) -> val(t($notype)) -> bind(X) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(checkSigTypes( TXs, (PV X) ) -> K) =
+     k(issueWarning(1,"Type failure: formal parameter " + pretty-print(X) + " has not been given a type.") ->  checkSigTypes( TXs ) -> val(t($notype)) -> bind(X) -> K)
+  if PV == noType .
+    
+  ***
+  *** Get the return type; this is a complement to the checkRetType
+  *** logic given above.
+  ***
+ ceq k(getRetType( (PV X) ) -> K)= k(val(t(PV')) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(val(t($notype)) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetType( (PV X) ) -> K) = k(val(t($notype)) -> K)
+  if PV == noType .
+  
+  ***
+  *** The logic for extractTypesAux is similar to that used in checkSigTypes; here,
+  *** we want to find the proper type for each typed identifier. Note that we do
+  *** not issue any advisories here; those will have already been issued when
+  *** the function being called was checked, making additional messages redundant.
+  *** The value list at the front gives us a place to build up the results we
+  *** need.
+  ***
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(val(t(PV'),Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(val(t($notype),Vl) -> extractTypesAux( TXs ) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+
+ ceq k(val(Vl) -> extractTypesAux( TXs, (PV X) ) -> K) = 
+     k(val(t($notype),Vl) -> extractTypesAux( TXs ) -> K)
+  if PV == noType .
+  
+  ***
+  *** Check the provided types against a list of types, reporting any differences
+  *** as type errors. This also checks to make sure the correct number of parameters
+  *** is provided. Note that the first typed identifier in the list given to
+  *** check contains the name of the function.
+  ***
+  eq k((compare (t(T), Vl) to (t(T), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k((compare Vl to Vl' in ((PV X), TXs)) -> K) .
+     
+  eq k((compare (t(T), Vl) to (t($notype), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k(issueWarning(1,"Type failure: function " + pretty-print(X) + ", function parameter " + pretty-print(X') + " not given a type.") ->
+       (compare Vl to Vl' in ((PV X), TXs)) -> K) .
+
+  eq k((compare (t($notype), Vl) to (t(T'), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k(issueWarning(1,"Type failure: function " + pretty-print(X) + ", actual argument for parameter " + pretty-print(X') + " not given a type.") ->
+       (compare Vl to Vl' in ((PV X), TXs)) -> K) .
+	
+ ceq k((compare (t(T), Vl) to (t(T'), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k(issueWarning(1,"Type failure: function " + pretty-print(X) + ", actual and formal function parameter " + pretty-print(X') + " types differ, " + 
+                      pretty-print(T) + "," + pretty-print(T') + ".") -> (compare Vl to Vl' in ((PV X), TXs)) -> K)
+  if T =/= T' .
+
+  eq k((compare (t(T), Vl) to nil in (PV X)) -> K) =
+     k(issueWarning(1,"Type failure: too many arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((compare nil to (t(T'), Vl') in ((PV X), (PV' X'), TXs)) -> K) =
+     k(issueWarning(1,"Type failure: not enough arguments provided in call to function " + pretty-print(X) + ".") -> K) .
+
+  eq k((compare nil to nil in (PV X)) -> K) = k(K) .
+
+  
+  ***
+  *** Get the return type for a call..
+  ***
+ ceq k(getRetTypeForCall( (PV X) ) -> K)= k(val(t(PV')) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' =/= noType .
+ ceq k(getRetTypeForCall( (PV X) ) -> K) = k(val(t($notype)) -> K)
+  if PV =/= noType /\ PV' := pv2pv(PV) /\ PV' == noType .
+ ceq k(getRetTypeForCall( (PV X) ) -> K) = k(val(t($notype)) -> K)
+  if PV == noType .
+  
+  ***
+  *** Function return; if we return from a function, we actually just keep going in the
+  *** current function after checking to ensure the return is correct. This is because
+  *** this is a static execution, and we want to cover even code that is technically
+  *** dead code to ensure it is free of type errors.
+  ***
+  eq k(val(t(T)) -> return(t(T)) -> K) = k(K) .
+ ceq k(val(t(T)) -> return(t(T')) -> K) = 
+     k(issueWarning(1,"Type error: return expected type " + pretty-print(T') + " but return expression evaluates to type " + pretty-print(T) + ".") -> K) 
+  if T =/= T' .
+endfm
+
+***
+*** Annotation statement semantics. In this dynamic semantics,
+*** they are just discarded. 
+***
+fmod TCHECK-ANNOTATION-SEMANTICS is
+  including STATE .
+  including GENERIC-ANNOTATION-SEMANTICS .
+  
+  var PE : TypeExp .
+  var K : Computation .
+  var E : Exp .
+  var X : Id .
+
+  eq k(stmt(assume(X,PE)) -> K) = k(K) .
+  eq k(stmt(assert(X,PE)) -> K) = k(K) .
+endfm
+
+fmod TCHECK-CAST-SEMANTICS is
+  including STATE .
+  including GENERIC-CAST-SEMANTICS .
+  
+  var K : Computation .
+  var PV : Type .
+  var E : Exp .
+    
+  eq k(exp(cast E to (PV)) -> K) = k(exp(E) -> K) .
+endfm
+  
+fmod TCHECK-SILF-SEMANTICS is
+  including TCHECK-DECL-SEMANTICS .
+  including TCHECK-LOOKUP-SEMANTICS .
+  including TCHECK-ARITH-SEMANTICS .
+  including TCHECK-RELATIONAL-SEMANTICS .
+  including TCHECK-LOGICAL-SEMANTICS .
+  including TCHECK-ASSIGNMENT-SEMANTICS .
+  including TCHECK-CONDITIONAL-SEMANTICS .
+  including TCHECK-LOOP-SEMANTICS .
+  including TCHECK-IO-SEMANTICS .
+  including GENERIC-COMP-SEMANTICS .
+  including TCHECK-FUNCTION-SEMANTICS .
+  including GENERIC-PROGRAM-SEMANTICS .
+  including TCHECK-ANNOTATION-SEMANTICS .
+  including TCHECK-CAST-SEMANTICS .
+  including GENERIC-SILF-SEMANTICS .
+
+  var P : Pgm .
+  var Nl : IntList .
+    
+  eq successMsg = "Type checking successful." .
+  eq failMsg = "Type checking found errors:" .  
+  
+  eq startingState(P,Nl) = k(pgm(P)) env(nil) genv(nil) fenv(nil) ftenv(nil)
+                          store([0,nil]) nextLoc(loc(0)) log(noOutput) currLoc(sl("nowhere",0,0,0,0,0,0)) .
+endfm
+

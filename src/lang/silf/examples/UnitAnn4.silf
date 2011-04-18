@@ -1,0 +1,14 @@
+function id(x)
+  post(UNITS): @unit(@result) = @unit(x);
+begin
+  return x;
+end
+function main(void)
+begin
+  var $m x;
+  var $f y;
+  x := x + y;
+  x := id(x);
+  y := id(y);
+  y := id(x);
+end

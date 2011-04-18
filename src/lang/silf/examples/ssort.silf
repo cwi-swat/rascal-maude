@@ -1,0 +1,49 @@
+var a[100]; 
+
+function ssort(void)
+begin
+  var i; 
+  var j; 
+  var t; 
+  var r;
+  
+  for i := 0 to 98 do
+    for j := (i + 1) to 99 do
+      if a[j] < a[i] then t := j; fi
+    od 
+    r := a[t];
+    a[t] := a[i];
+    a[i] := r; 
+  od
+  return 0;
+end
+
+function display(void)
+begin
+  var c;
+  for c := 0 to 99 do
+    write a[c];
+  od
+  return 0;
+end
+
+function main(void)
+begin
+  var x; 
+  var y;
+  y := read;
+  for x := 0 to 99 do
+    a[x] := y;
+    y := y - 1;
+  od
+  call ssort();
+  call display();
+  y := read;
+  write 0; write 0; write 0; write 0; 
+  for x := 0 to 99 do
+    a[x] := y;
+    y := y - 1;
+  od
+  call ssort();
+  call display();
+end
